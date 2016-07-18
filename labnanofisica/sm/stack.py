@@ -14,9 +14,8 @@ from scipy.ndimage.filters import uniform_filter
 
 from tkinter import Tk, filedialog
 
-import tormenta.analysis.tools as tools
-import tormenta.analysis.maxima as maxima
-from tormenta.control.guitools import insertSuffix
+import labnanofisica.sm.tools as tools
+import labnanofisica.sm.maxima as maxima
 
 
 def convert(word):
@@ -47,10 +46,10 @@ def split_two_colors(files):
 
             center = int(0.5*ff['data'].value.shape[1])
 
-            with hdf.File(insertSuffix(name, '_ch0'), 'w') as ff0:
+            with hdf.File(tools.insertSuffix(name, '_ch0'), 'w') as ff0:
                 ff0['data'] = ff['data'][:, center - 5 - 128:center - 5, :]
 
-            with hdf.File(insertSuffix(name, '_ch1'), 'w') as ff1:
+            with hdf.File(tools.insertSuffix(name, '_ch1'), 'w') as ff1:
                 ff1['data'] = ff['data'][:, center + 5:center + 5 + 128, :]
 
 

@@ -14,7 +14,7 @@ import tifffile as tiff
 import h5py as hdf
 from tkinter import Tk, filedialog
 
-from tormenta.analysis.maxima import Maxima
+import labnanofisica.sm.maxima as maxima
 
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
@@ -56,7 +56,7 @@ def fit_and_plot(images, fig):
     points = []
     marks = ['rx', 'bs']
     for k in [0, 1]:
-        mm = Maxima(images[k])
+        mm = maxima.Maxima(images[k])
         mm.find(alpha=2.5)
         mm.getParameters()
         mm.fit()

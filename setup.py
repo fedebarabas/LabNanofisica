@@ -1,12 +1,6 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jul 18 18:21:52 2016
-
-@author: Federico Barabas
-"""
 
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 # Utility function to read the README file.
@@ -26,8 +20,8 @@ setup(
     license="BSD",
     keywords="single-molecule imaging",
     url="https://github.com/fedebarabas/LabNanofisica",
-    packages=['labnanofisica', 'bin'],
-    long_description=read('README'),
+    packages=find_packages(),
+#    long_description=read('README'),
     classifiers=[
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Physics",

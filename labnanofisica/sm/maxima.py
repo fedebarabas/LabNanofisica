@@ -2,7 +2,7 @@
 """
 Created on Mon Feb 17 18:23:40 2014
 
-@author: fbaraba
+@author: Federico Barabas
 """
 
 import numpy as np
@@ -13,7 +13,7 @@ from scipy.ndimage import label
 from scipy.ndimage.filters import convolve, maximum_filter
 from scipy.ndimage.measurements import maximum_position, center_of_mass
 
-import tormenta.analysis.tools as tools
+import labnanofisica.sm.tools as tools
 
 import warnings
 warnings.filterwarnings("error")
