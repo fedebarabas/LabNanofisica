@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.signal import fftconvolve
 from scipy.ndimage import center_of_mass
 import scipy.optimize as opt
@@ -74,8 +75,8 @@ def simmetric_gaussian(bkg, height, x0, y0, sx, sy):
     """Returns a gaussian function with the given parameters"""
     sx = float(sx)
     sy = float(sy)
-    return lambda x, y: bkg + height*np.exp(-(((x0 - x)/sx)**2
-                                            + ((y0 - y)/sy)**2)/2)
+    return lambda x, y: bkg + height*np.exp(-(((x0 - x)/sx)**2 +
+                                            ((y0 - y)/sy)**2)/2)
 
 
 # Generic gaussian definition taken from
@@ -96,8 +97,8 @@ def generic_gaussian(bkg, amp, x0, y0, sx, sy, theta):
 def fit_LS(function, data, params):
     """Returns (height, x, y, width_x, width_y)
     the gaussian parameters of a 2D distribution found by a fit"""
-    errorfunction = lambda p: np.ravel(function(*p)(*np.indices(data.shape)) -
-                                       data)
+    def errorfunction(p):
+        np.ravel(function(*p)(*np.indices(data.shape)) - data)
     p, success = opt.leastsq(errorfunction, params)
     return p
 
@@ -153,8 +154,6 @@ def drift_track(data):
     return x_gen, y_gen
 
 
-import matplotlib.pyplot as plt
-
 # Data loading
 # folder = r'/home/federico/data/CM1/2014-06-17 - pngs drift/'
 # file1 = '02b1t30fr100px40.png'
@@ -176,6 +175,7 @@ def make_histo(path, nbins):
 
 def chunker(seq, size):
     return np.array([seq[pos:pos + size] for pos in range(0, len(seq), size)])
+
 
 def xycorrect(images):
 

@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import tifffile as tiff
 
-from tormenta.analysis.stack import Stack
-from tormenta.analysis.gaussians import twoDSymmGaussian
+from labnanofisica.sm.stack import Stack
+from labnanofisica.gaussians import twoDSymmGaussian
 
 
 def loadStacks(ask, folder=None):

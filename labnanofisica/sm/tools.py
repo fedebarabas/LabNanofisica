@@ -7,9 +7,6 @@ Created on Tue Feb 18 18:03:01 2014
 
 import os
 import numpy as np
-from scipy.special import jn
-from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
 
 
 def insertSuffix(filename, suffix, newExt=None):
@@ -18,53 +15,6 @@ def insertSuffix(filename, suffix, newExt=None):
         return names[0] + suffix + names[1]
     else:
         return names[0] + suffix + newExt
-
-
-def gaussian(x, fwhm):
-    return np.exp(- 4 * np.log(2) * (x / fwhm)**2)
-
-
-def best_gauss(x, x0, fwhm):
-    """ Returns the closest gaussian function to an Airy disk centered in x0
-    and a full width half maximum equal to fwhm."""
-    return np.exp(- 4 * np.log(2) * (x - x0)**2 / fwhm**2)
-
-
-def airy(x):
-    return (2 * jn(1, 2 * np.pi * x) / (2 * np.pi * x))**2
-
-
-def get_fwhm(wavelength, NA):
-    ''' Gives the FWHM (in nm) for a PSF with wavelength in nm'''
-
-    x = np.arange(-2, 2, 0.01)
-    y = airy(x)
-
-    # Fitting only inside first Airy's ring
-    fit_int = np.where(abs(x) < 0.61)[0]
-
-    fit_par, fit_var = curve_fit(gaussian, x[fit_int], y[fit_int], p0=0.5)
-
-    return fit_par[0] * wavelength / NA
-
-
-def airy_vs_gauss():
-
-    wavelength = 670        # nm
-    NA = 1.42
-
-    x = np.arange(-2, 2, 0.01)
-    y = airy(x)
-    fw = get_fwhm(wavelength, NA)
-    fit = best_gauss(x, 0, fw * NA / wavelength)
-
-    print('FWHM is', np.round(fw))
-
-    plt.plot(x, y, label='Airy disk')
-    plt.plot(x, fit, label='Gaussian fit')
-    plt.legend()
-    plt.grid('on')
-    plt.show()
 
 
 def mode(array):
@@ -94,24 +44,3 @@ def dropOverlapping(maxx, d):
             n += 1
 
     return noOverlaps[:n]
-
-
-def kernel(fwhm):
-    """ Returns the kernel of a convolution used for finding objects of a
-    full width half maximum fwhm (in pixels) in an image."""
-    window = np.ceil(fwhm) + 3
-#    window = int(np.ceil(fwhm)) + 2
-    x = np.arange(0, window)
-    y = x
-    xx, yy = np.meshgrid(x, y, sparse=True)
-    matrix = best_gauss(xx, x.mean(), fwhm) * best_gauss(yy, y.mean(), fwhm)
-    matrix /= matrix.sum()
-    return matrix
-
-
-def xkernel(fwhm):
-    window = np.ceil(fwhm) + 3
-    x = np.arange(0, window)
-    matrix = best_gauss(x, x.mean(), fwhm)
-    matrix = matrix - matrix.sum() / matrix.size
-    return matrix
