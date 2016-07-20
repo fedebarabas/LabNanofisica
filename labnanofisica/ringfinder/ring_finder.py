@@ -44,8 +44,8 @@ from tkinter import Tk, filedialog, simpledialog
 #from scipy.ndimage.filters import convolve, maximum_filter
 #from scipy.ndimage.measurements import maximum_position, center_of_mass
 #
-import labnanofisica.sm.tools as tools
-import labnanofisica.gaussians as gaussians
+#import labnanofisica.sm.tools as tools
+#import labnanofisica.gaussians as gaussians
 #
 #import warnings
 #warnings.filterwarnings("error")   
@@ -110,8 +110,19 @@ def firstNmax(coord, image, N):
         coord3 = np.asarray(coordinates3)
         
         return coord3
-            
         
+def arrayExt(array):
+    
+    y = array[::-1]
+    z = []
+    z.append(y)
+    z.append(array)
+    z.append(y)
+    z = np.array(z)
+    z = np.reshape(z,3*np.size(array))
+    
+    return z
+
 class RingAnalizer(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
@@ -134,6 +145,8 @@ class RingAnalizer(QtGui.QMainWindow):
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('50')
         self.dirButton = QtGui.QPushButton('get direction')
+        self.deltaAngleEdit = QtGui.QLineEdit('30')
+        self.thetaStepEdit = QtGui.QLineEdit('3')
         
         # Widgets' layout
         self.layout = QtGui.QGridLayout()
@@ -142,15 +155,19 @@ class RingAnalizer(QtGui.QMainWindow):
         
         self.imagegui = ImageGUI(self)
         self.layout.addWidget(self.imagegui, 0, 0, 14, 8)
+        self.layout.addWidget(self.loadimageButton, 0, 9, 1, 1)
+        self.layout.addWidget(self.roiSizeEdit, 1, 9, 1, 1)
+        self.layout.addWidget(self.corrButton, 2, 9, 1, 1)
+        self.layout.addWidget(self.thetaStepEdit, 3, 9, 1, 1)
+        self.layout.addWidget(self.deltaAngleEdit, 4, 9, 1, 1)
         self.layout.addWidget(self.FFT2Button, 5, 9, 1, 1)
         self.layout.addWidget(self.fftThrEdit, 6, 9, 1, 1)
-        self.layout.addWidget(self.corrButton, 2, 9, 1, 1)
-        self.layout.addWidget(self.pointsButton, 3, 9, 1, 1)
-        self.layout.addWidget(self.pointsThrEdit, 4, 9, 1, 1)
-        self.layout.addWidget(self.loadimageButton, 0, 9, 1, 1)
-        self.layout.addWidget(self.filterImageButton, 7, 9, 1, 1)
-        self.layout.addWidget(self.dirButton,8,9,1,1)
-        self.layout.addWidget(self.roiSizeEdit, 1, 9, 1, 1)
+        self.layout.addWidget(self.pointsButton, 7, 9, 1, 1)
+        self.layout.addWidget(self.pointsThrEdit, 8, 9, 1, 1)
+        self.layout.addWidget(self.dirButton,9,9,1,1)
+        self.layout.addWidget(self.filterImageButton, 10, 9, 1, 1)
+
+        
 
         self.roiSizeEdit.textChanged.connect(self.imagegui.updateROI)
         self.loadimageButton.clicked.connect(self.imagegui.loadImage)
@@ -423,18 +440,16 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         
         self.pCorr.clear()
         
-        self.n = 1
-        self.theta = np.arange(0,180,self.n)
+        n = np.float(self.main.thetaStepEdit.text())
+        self.theta = np.arange(0,180,n)
         
-        self.thetaSteps = np.arange(0,(180/self.n),1)
+        self.thetaSteps = np.arange(0,(180/n),1)
         self.phaseSteps = np.arange(0,21,1)
 
         self.R = np.zeros(np.size(self.thetaSteps))
         self.R2 = np.zeros(np.size(self.phaseSteps)) 
-        self.R22 = np.zeros(np.size(self.thetaSteps))
-        self.R3 = np.zeros(np.size(self.phaseSteps))
-        self.R33 = np.zeros(np.size(self.thetaSteps))
-        self.R22ph = np.zeros(np.size(self.thetaSteps))
+        R22 = np.zeros(np.size(self.thetaSteps))
+        R22ph = np.zeros(np.size(self.thetaSteps))
         
         wvlen = 9
         
@@ -442,15 +457,15 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         
         for i in self.thetaSteps:
             for p in self.phaseSteps:
-                self.axonTheta = simAxon(self.subimgSize, wvlen, self.n*i, p*.025, a=0, b=1).simAxon;
+                self.axonTheta = simAxon(self.subimgSize, wvlen, n*i, p*.025, a=0, b=1).simAxon;
 
                 r = corr2(self.selected, self.axonTheta)
                 self.R2[p] = r
-            self.R22[i-1] = np.max(self.R2)
-            self.R22ph[i-1] = np.argmax(self.R2)     #save the phase that maximizes correlation
+            R22[i-1] = np.max(self.R2)
+            R22ph[i-1] = np.argmax(self.R2)     #save the phase that maximizes correlation
             
-        self.thetaMax = self.theta[np.argmax(self.R22)]
-        self.phaseMax = self.R22ph[np.argmax(self.R22)]
+        self.thetaMax = self.theta[np.argmax(R22)]
+        self.phaseMax = R22ph[np.argmax(R22)]
         
         
         self.bestAxon = simAxon(self.subimgSize, wvlen, self.thetaMax, self.phaseMax, a=0, b=1).simAxon        
@@ -460,17 +475,26 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         
         pen1 = pg.mkPen(color=(0,255,100), width=2, style=QtCore.Qt.SolidLine, antialias = True)
         pen2 = pg.mkPen(color=(255,50,60), width=1, style=QtCore.Qt.SolidLine, antialias = True)
-        self.pCorr.plot(self.theta, self.R22, pen=pen1)
+        self.pCorr.plot(self.theta, R22, pen=pen1)
         self.pCorr.plot(self.theta, 0.1*np.ones(np.size(self.theta)),pen=pen2)
         self.pCorr.showGrid(x=False, y=False)
         
         if self.meanAngle != None:
-            deltaAngle = np.arange(self.meanAngle-10,self.meanAngle+10)
+            angleMax = np.float(self.main.deltaAngleEdit.text())
+            deltaAngle = np.arange(self.meanAngle-angleMax,self.meanAngle+angleMax,dtype=int)
             self.pCorr.plot(deltaAngle,0.3*np.ones(np.size(deltaAngle)),fillLevel=0,brush=(50,50,200,100))
         else:
             pass
         
         self.pCorr.showGrid(x=True, y=True)
+        
+        # extension to deal with angles close to 0 or 180
+        R22 = arrayExt(R22)
+        deltaAngle = np.arange(180+self.meanAngle-angleMax,180+self.meanAngle+angleMax,dtype=int)
+        if np.max(R22[np.array(deltaAngle/n,dtype = int)]) > 0.1:
+            print('¡HAY ANILLOS!')
+        else:
+            print('NO HAY ANILLOS')
 
                 
         

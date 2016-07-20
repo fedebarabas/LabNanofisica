@@ -8,6 +8,11 @@ Created on Fri Jul 15 12:25:40 2016
 from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
+from skimage.feature import canny
+from skimage import filters
+from skimage.transform import (hough_line, hough_line_peaks,
+                               probabilistic_hough_line)
+from skimage.filters import threshold_otsu, sobel
 #from skimage import img_as_float
 
 
@@ -28,6 +33,7 @@ from pyqtgraph.Qt import QtCore, QtGui
 from tkinter import Tk, filedialog, simpledialog
 
 def getFilename(title, types, initialdir=None):
+    
     try:
         root = Tk()
         root.withdraw()
@@ -63,6 +69,7 @@ def dist(a, b):
     return out
     
 def cosTheta(a,b):
+    
     if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
         return 0
     
@@ -84,6 +91,7 @@ def blockshaped(arr, nrows, ncols):
                .reshape(-1, nrows, ncols))
     
 def firstNmax(coord, image, N):
+    
     if np.shape(coord)[0] < N:
         return []
     else:
@@ -101,6 +109,17 @@ def firstNmax(coord, image, N):
         
         return coord3
         
+def arrayExt(array):
+    
+    y = array[::-1]
+    z = []
+    z.append(y)
+    z.append(array)
+    z.append(y)
+    z = np.array(z)
+    z = np.reshape(z,3*np.size(array))
+    
+    return z
         
 class RingAnalizer10x10(QtGui.QMainWindow):
 
@@ -193,6 +212,9 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         def rFfft2():
             return self.RingFinder(self.FFT2)
         self.FFT2Button.clicked.connect(rFfft2)
+        def rFcorr():
+            return self.RingFinder(self.corrAnalysis)
+        self.corrButton.clicked.connect(rFcorr)
         
         
         
@@ -234,23 +256,15 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         self.outputResult.clear()
         m = np.float(self.subimgNumEdit.text())
         FFT2input = self.cropImage()
-#        self.subimg = np.float(self.fftThrEdit.text())
-#        self.outputImg.setImage(FFT2input[self.subimg])
-#        self.outputData = np.zeros(np.shape(self.inputData))
         self.blocksInput = blockshaped(self.inputData, self.inputDataSize/m, self.inputDataSize/m)
-#        print(self.outputData)
         M = np.zeros(m**2)
         intTot = np.sum(self.inputData)
 #        print(intTot)
-#        print(m)
-#        print(np.shape(self.blocksInput))
-#        print(np.arange(0,np.shape(FFT2input)[0]))
-#        print(np.size(np.arange(0,np.shape(FFT2input)[0])))
-#        
+        
         for i in np.arange(0,np.shape(FFT2input)[0]):
             
         # algorithm for FFT 2D
-            if algorithm(self.blocksInput[i,:,:]) :
+            if algorithm(self.blocksInput[i,:,:]):
 
 #            if np.sum(self.blocksInput[i,:,:]) > (intTot/m**2) and algorithm(self.blocksInput[i,:,:]) :
 #            if np.sum(self.blocksInput[i,:,:]) > intTot/m**2:    
@@ -258,12 +272,9 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             else:
                 M[i] = 0
                 
-#        print(M)
         M1 = M.reshape(m,m)
         print(np.shape(M1))
         self.outputData = np.kron(M1, np.ones((500/m,500/m)))
-#        print(np.shape(self.outputData))
-#        self.outputImg.setImage(M1)
         self.outputImg.setImage(self.inputData)
         self.outputResult.setImage(self.outputData)
         self.outputResult.setZValue(10)  # make sure this image is on top
@@ -272,15 +283,10 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         self.setGrid(self.outputVb,n=10)
         
     def FFT2(self, data):        
-        pass
 
          # calculate new fft2      
         fft2output = np.log10(np.abs(np.real(np.fft.fftshift(np.fft.fft2(data)))))        
 
-        # add new fft2 graph
-        
-        # set fft2 analysis threshold
-#        self.fftThr = np.float(self.fftThrEdit.text())
         self.fftThr = 0.4
         
         # calculate local intensity maxima
@@ -314,6 +320,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             return 1
         else:
             return 0
+            
 
     def pointsAnalysis(self, data):
         
@@ -328,7 +335,6 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         dmax = 11
 
         D = []
-#        print(np.arange(np.shape(points)[0]))
         
         # look up every point
         for i in np.arange(0,np.shape(points)[0]-1):
@@ -354,9 +360,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
                         if dmin < d2 < dmax and np.abs(t) > 0.9 :
                             # save the three points and plot the connections
                             D.append([points[i],points[j],points[k]])
-#                            self.pointsPlot.plot([points[i][0],points[j][0],points[k][0]],
-#                                                 [points[i][1],points[j][1],points[k][1]], 
-#                                                 pen=pen, symbolBrush=(0,204,122), symbolPen='w')
+
                         else:
                             pass
 
@@ -364,7 +368,98 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             return 1
         else:
             return 0  
+            
+    def corrAnalysis(self, data): 
         
+        meanAngle = self.getDirection(data)
+        
+        if meanAngle == 666:
+            return 0
+        else:
+            subImgSize = np.shape(data)[0]        
+            
+            n = 3
+#            theta = np.arange(0,180,n)
+            
+            thetaSteps = np.arange(0,(180/n),1)
+            phaseSteps = np.arange(0,21,1)
+    
+            r = np.zeros(np.size(thetaSteps))
+            R = np.zeros(np.size(thetaSteps)) 
+    
+            wvlen = 9
+            
+            # for now we correlate with the full sin2D pattern
+            
+            for i in thetaSteps:
+                for p in phaseSteps:
+                    axonTheta = simAxon(subImgSize, wvlen, n*i, p*.025, a=0, b=1).simAxon;
+    
+                    c = corr2(data,axonTheta)
+                    r[p] = c
+                    R[i-1] = np.max(r)
+            
+            print('meanAngle is {}'.format(meanAngle))
+            deltaAngle = np.arange(179+meanAngle-15,179+meanAngle+15,n,dtype=int) 
+            print('deltaAngle is {}'.format(deltaAngle))
+            R = arrayExt(R)
+            if np.max(R[np.array(deltaAngle/n,dtype=int)]) > 0.1:
+                return 1
+            else:
+                return 0
+
+        
+    def getDirection(self, data):        
+        
+        # gaussian filter to get low resolution image
+        sigma = 4
+        img = ndi.gaussian_filter(data,sigma)
+        
+        # binarization of image
+        thresh = threshold_otsu(img)
+        binary = img > thresh
+        
+        #find edges
+        edges = filters.sobel(binary)
+        
+        # get directions
+        lines = probabilistic_hough_line(edges, threshold=10, line_length=20,
+                                         line_gap=3)
+        
+       # plot and save the angles of the lines
+        angleArr = []
+        print('lines is {}'.format(lines))
+        print(type(lines))
+        if lines == []:
+            return 666
+            
+        else:
+            for line in lines:
+                p0, p1 = line
+    #            pen = pg.mkPen(color=(0,255,100), width=1, style=QtCore.Qt.SolidLine, antialias = True)
+    #            self.dirPlot.plot((p0[1], p1[1]),(p0[0], p1[0]),pen=pen)
+                
+                # get the m coefficient of the lines and the angle
+                if p1[1] == p0[1]:
+                    angle = 90
+                else:
+                    m = (p1[0]-p0[0])/(p1[1]-p0[1])
+                    angle = (180/np.pi)*np.arctan(m)
+    
+                if angle < 0:
+                    angle = angle + 180
+                else:
+                    pass
+                
+                angleArr.append(angle)
+            
+            # calculate mean angle and its standard deviation
+            print('angleArr is {}'.format(angleArr))
+            meanAngle = np.mean(angleArr)
+#            stdAngle = np.std(angleArr)
+
+            return meanAngle
+
 if __name__ == '__main__':
 
     app = QtGui.QApplication([])
