@@ -9,9 +9,10 @@ import numpy as np
 
 from scipy.special import erf
 from scipy.optimize import minimize
-from scipy.ndimage import label
-from scipy.ndimage.filters import convolve, maximum_filter
-from scipy.ndimage.measurements import maximum_position, center_of_mass
+from scipy import ndimage as ndi
+#from scipy.ndimage import label
+#from scipy.ndimage.filters import convolve, maximum_filter
+#from scipy.ndimage.measurements import maximum_position, center_of_mass
 
 import labnanofisica.sm.tools as tools
 
@@ -49,14 +50,14 @@ class Maxima():
             self.win_size = win_size
             self.kernel = kernel
             self.xkernel = xkernel
-            self.image_conv = convolve(self.image.astype(float), self.kernel)
+            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
         except RuntimeError:
             # If the kernel is None, I assume all the args must be calculated
             self.fwhm = tools.get_fwhm(670, 1.42) / 120
             self.win_size = int(np.ceil(self.fwhm))
             self.kernel = tools.kernel(self.fwhm)
             self.xkernel = tools.xkernel(self.fwhm)
-            self.image_conv = convolve(self.image.astype(float), self.kernel)
+            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
 
         # TODO: FIXME
         if self.bkg_image is None:
@@ -124,7 +125,7 @@ class Maxima():
         """
         self.alpha = alpha
 
-        image_max = maximum_filter(self.image_conv, self.win_size)
+        image_max = ndi.filters.maximum_filter(self.image_conv, self.win_size)
         maxima = (self.image_conv == image_max)
 
         self.mean = np.mean(self.image_conv)
@@ -134,9 +135,9 @@ class Maxima():
         diff = (image_max > self.threshold)
         maxima[diff == 0] = 0
 
-        labeled, num_objects = label(maxima)
+        labeled, num_objects = ndi.label(maxima)
         if num_objects > 0:
-            self.positions = maximum_position(self.image, labeled,
+            self.positions = ndi.measurements.maximum_position(self.image, labeled,
                                               range(1, num_objects + 1))
             self.positions = np.array(self.positions).astype(int)
             self.drop_overlapping()
@@ -251,7 +252,7 @@ def start_point(area, bkg):
     center = area.shape[0] // 2
     area_bkg = area - bkg
     A = 1.54 * area_bkg[center, center]
-    x0, y0 = center_of_mass(area_bkg)
+    x0, y0 = ndi.measurements.center_of_mass(area_bkg)
 
     return [A, x0, y0, np.mean(bkg)]
 
@@ -272,7 +273,7 @@ def fit_GME(area, fwhm, xx=np.arange(0.5, 5.5)):
     xt = np.zeros(400)
     yt = np.zeros(400)
 
-    x0, y0 = center_of_mass(area)
+    x0, y0 = ndi.measurements.center_of_mass(area)
     for i in np.arange(400):
         pp = integratedPSF(x0, y0, 0.6*fwhm, np.arange(5))
         x0 = np.sum(area * xx * pp) / np.sum(area * pp)

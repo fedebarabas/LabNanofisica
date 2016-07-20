@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 from PIL import Image
-from neurosimulations import simAxon
+from labnanofisica.ringfinder.neurosimulations import simAxon
 
 #from scipy import ndimage as ndi
 #import matplotlib.pyplot as plt
@@ -82,6 +82,24 @@ def blockshaped(arr, nrows, ncols):
     return (arr.reshape(h//nrows, nrows, -1, ncols)
                .swapaxes(1,2)
                .reshape(-1, nrows, ncols))
+    
+def firstNmax(coord, image, N):
+    if np.shape(coord)[0] < N:
+        return []
+    else:
+        aux = np.zeros(np.shape(coord)[0])
+        for i in np.arange(np.shape(coord)[0]):
+            aux[i] = image[coord[i,0],coord[i,1]]
+        
+        auxmax = aux.argsort()[-N:][::-1]
+        
+        coordinates3 = []
+        for i in np.arange(0,N):
+            coordinates3.append(coord[auxmax[i]])
+            
+        coord3 = np.asarray(coordinates3)
+        
+        return coord3
         
         
 class RingAnalizer10x10(QtGui.QMainWindow):
@@ -115,6 +133,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         
         self.inputImg = pg.ImageItem()
         self.inputVb = self.inputWidget.addViewBox(col=0,row=0)
+        self.inputVb.setAspectLocked(True)
         self.inputVb.addItem(self.inputImg)
         
         inputImgHist = pg.HistogramLUTItem()
@@ -122,15 +141,16 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         inputImgHist.setImageItem(self.inputImg)
         self.inputWidget.addItem(inputImgHist)
         
-        imInput = Image.open('spectrin1.tif')
+        imInput = Image.open(r'labnanofisica\ringfinder\spectrin1.tif')
         self.inputData = np.array(imInput)
         self.inputImg.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])
-
-
         
+        
+   
         self.outputImg = pg.ImageItem()
         self.outputVb = self.outputWidget.addViewBox(col=0,row=0)
+        self.outputVb.setAspectLocked(True)
         self.outputVb.addItem(self.outputImg)
         
         outputImgHist = pg.HistogramLUTItem()
@@ -147,6 +167,8 @@ class RingAnalizer10x10(QtGui.QMainWindow):
     
         self.buttonsLayout = QtGui.QGridLayout()
         self.buttonWidget.setLayout(self.buttonsLayout)
+        
+        self.setGrid(self.inputVb, n=10)
         
         self.FFT2Button = QtGui.QPushButton('FFT 2D')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -169,7 +191,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             return self.RingFinder(self.pointsAnalysis)
         self.pointsButton.clicked.connect(rFpoints)
         def rFfft2():
-            return self.RingFinder(self.RingFinder(self.FFT2))
+            return self.RingFinder(self.FFT2)
         self.FFT2Button.clicked.connect(rFfft2)
         
         
@@ -189,6 +211,23 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         
         return self.blocksInput
         
+    def setGrid(self, image, n):
+        
+        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
+        
+        xlines = []
+        ylines = []
+        
+        for i in np.arange(0,n-1):
+            xlines.append(pg.InfiniteLine(pen=pen, angle=0))
+            ylines.append(pg.InfiniteLine(pen=pen))
+        
+        for i in np.arange(0,n-1):     
+            xlines[i].setPos((self.inputDataSize/n)*(i+1))
+            ylines[i].setPos((self.inputDataSize/n)*(i+1))       
+            image.addItem(xlines[i])
+            image.addItem(ylines[i])
+
     def RingFinder(self, algorithm):
         
         self.outputImg.clear()
@@ -211,14 +250,18 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         for i in np.arange(0,np.shape(FFT2input)[0]):
             
         # algorithm for FFT 2D
-            
-            if np.sum(self.blocksInput[i,:,:]) > intTot/m**2 and algorithm(self.blocksInput[i,:,:]) :
+            if algorithm(self.blocksInput[i,:,:]) :
+
+#            if np.sum(self.blocksInput[i,:,:]) > (intTot/m**2) and algorithm(self.blocksInput[i,:,:]) :
+#            if np.sum(self.blocksInput[i,:,:]) > intTot/m**2:    
                 M[i] = 1
+            else:
+                M[i] = 0
                 
 #        print(M)
         M1 = M.reshape(m,m)
-#        print(np.shape(M1))
-        self.outputData = ndi.interpolation.zoom(M1,500/m,order=0)
+        print(np.shape(M1))
+        self.outputData = np.kron(M1, np.ones((500/m,500/m)))
 #        print(np.shape(self.outputData))
 #        self.outputImg.setImage(M1)
         self.outputImg.setImage(self.inputData)
@@ -226,82 +269,60 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
         
+        self.setGrid(self.outputVb,n=10)
         
     def FFT2(self, data):        
         pass
-#        self.fft2.clear()
-##        self.selected = self.roi.getArrayRegion(self.data, self.bigimg)
-##        self.subimgSize = np.shape(self.selected)[0]
-#        fft2output = np.log10(np.abs(np.real(np.fft.fftshift(np.fft.fft2(self.selected)))))        
-##        i,j = np.unravel_index(fft2output.argmax(), fft2output.shape)
-##        fft2output[i,j] = 0
-#        
-#        self.fft2.addItem(self.FFT2img)
-#        self.FFT2img.setImage(fft2output)
-#        self.fftThr = np.float(self.main.fftThrEdit.text())
-#        coordinates = peak_local_max(fft2output,min_distance=4,threshold_rel=self.fftThr)
-#        print(self.fftThr)
-#        print(coordinates)
-#        
-#        A = self.subimgSize
-#        rminX = A*(14/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2+1
-#        rminY = A*(14/100)*np.sin(np.linspace(0, 2*np.pi, 1000))+A/2+1
-#        rmaxX = A*(9/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2+1
-#        rmaxY = A*(9/100)*np.sin(np.linspace(0, 2*np.pi, 1000))+A/2+1
-#        
-#        self.fft2.plot(rminX,rminY, pen=(0,102,204))
-#        self.fft2.plot(rmaxX,rmaxY, pen=(0,102,204))
-#        self.fft2.plot(coordinates[:, 0],coordinates[:, 1], pen=None, symbolBrush=(0,102,204), symbolPen='w')
-##       self.fft2.plot(maxX,maxY, pen=None, symbolBrush=(0,102,204), symbolPen='w')
-#        self.fft2.setAspectLocked(True)
-#       
-#    def corrAnalysis(self):        
-#        
-#        self.pCorr.clear()
-#        
-#        self.n = 1
-#        self.theta = np.arange(0,180,self.n)
-#        
-#        self.thetaSteps = np.arange(0,(180/self.n),1)
-#        self.phaseSteps = np.arange(0,21,1)
-#
-#        self.R = np.zeros(np.size(self.thetaSteps))
-#        self.R2 = np.zeros(np.size(self.phaseSteps)) 
-#        self.R22 = np.zeros(np.size(self.thetaSteps))
-#        self.R3 = np.zeros(np.size(self.phaseSteps))
-#        self.R33 = np.zeros(np.size(self.thetaSteps))
-#        self.R22ph = np.zeros(np.size(self.thetaSteps))
-#        
-#        wvlen = 9
-#        
-#        # for now we correlate with the full sin2D pattern
-#        
-#        for i in self.thetaSteps:
-#            for p in self.phaseSteps:
-#                self.axonTheta = simAxon(self.subimgSize, wvlen, self.n*i, p*.025, a=0, b=1).simAxon;
-#
-#                r = corr2(self.selected, self.axonTheta)
-#                self.R2[p] = r
-#            self.R22[i-1] = np.max(self.R2)
-#            self.R22ph[i-1] = np.argmax(self.R2)     #save the phase that maximizes correlation
-#            
-#        self.thetaMax = self.theta[np.argmax(self.R22)]
-#        self.phaseMax = self.R22ph[np.argmax(self.R22)]
-#        
-#        
-#        self.bestAxon = simAxon(self.subimgSize, wvlen, self.thetaMax, self.phaseMax, a=0, b=1).simAxon        
-#        
-#        self.img1.setImage(self.bestAxon)
-#        self.img2.setImage(self.selected)
-#        
-#        pen = pg.mkPen(color=(0,255,100), width=2, style=QtCore.Qt.SolidLine, antialias = False)
-#        self.pCorr.plot(self.theta, self.R22, pen=pen)
-#        self.pCorr.showGrid(x=True, y=True)
-#               
+
+         # calculate new fft2      
+        fft2output = np.log10(np.abs(np.real(np.fft.fftshift(np.fft.fft2(data)))))        
+
+        # add new fft2 graph
+        
+        # set fft2 analysis threshold
+#        self.fftThr = np.float(self.fftThrEdit.text())
+        self.fftThr = 0.4
+        
+        # calculate local intensity maxima
+        coordinates = peak_local_max(fft2output, min_distance=2, threshold_rel=self.fftThr)
+        
+        # take first 3 max
+        coordinates = firstNmax(coordinates, fft2output, N=3)
+
+        # size of the subimqge of interest
+        A = np.shape(data)[0]
+                 
+        # max and min radius in pixels, 9 -> 220 nm, 12 -> 167 nm
+        rmin = 9
+        rmax = 12
+        
+         # aux arrays: ringBool is checked to define wether there are rings or not
+        ringBool = []
+        
+        # D saves the distances of local maxima from the centre of the fft2
+        D = []
+        
+        # loop for calculating all the distances d, elements of array D
+        
+        for i in np.arange(0,np.shape(coordinates)[0]):
+            d = dist([A/2,A/2],coordinates[i])
+            D.append(dist([A/2,A/2],coordinates[i]))
+            if A*(rmin/100) < d < A*(rmax/100):
+                ringBool.append(1)
+                
+        if np.sum(ringBool) == np.shape(coordinates)[0]-1 and np.sum(ringBool) > 0 :
+            return 1
+        else:
+            return 0
+
     def pointsAnalysis(self, data):
         
-        self.pointsThr = .65
-        points = peak_local_max(data,min_distance=3,threshold_rel=self.pointsThr)
+        self.pointsThr = .3
+        points = peak_local_max(data,min_distance=6,threshold_rel=self.pointsThr)
+        points = firstNmax(points, data, N=7)    
+        
+        if points == []:
+            return 0  
         
         dmin = 8
         dmax = 11
@@ -342,9 +363,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         if len(D)>0 :
             return 1
         else:
-            return 0
-            
-        return 1
+            return 0  
         
 if __name__ == '__main__':
 

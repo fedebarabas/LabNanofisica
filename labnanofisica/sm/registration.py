@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from scipy.ndimage import affine_transform
-import tifffile as tiff
+#import tifffile as tiff
 import h5py as hdf
 from tkinter import Tk, filedialog
 
