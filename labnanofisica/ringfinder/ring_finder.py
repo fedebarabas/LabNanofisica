@@ -457,8 +457,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         
         for i in self.thetaSteps:
             for p in self.phaseSteps:
-                self.axonTheta = simAxon(self.subimgSize, wvlen, n*i, p*.025, a=0, b=1).simAxon;
-
+                self.axonTheta = simAxon(self.subimgSize, wvlen, n*i, p*.025, a=0, b=2).simAxon;
                 r = corr2(self.selected, self.axonTheta)
                 self.R2[p] = r
             R22[i-1] = np.max(self.R2)
@@ -544,6 +543,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
             angleArr.append(angle)
         
         # calculate mean angle and its standard deviation
+        print(angleArr)
         self.meanAngle = np.mean(angleArr)
         self.stdAngle = np.std(angleArr)
         

@@ -127,6 +127,8 @@ class RingAnalizer10x10(QtGui.QMainWindow):
 
         super().__init__(*args, **kwargs)
         
+        self.i = 0        
+        
         self.setWindowTitle('RingAnalizer')
         
         self.cwidget = QtGui.QWidget()
@@ -191,6 +193,8 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         
         self.FFT2Button = QtGui.QPushButton('FFT 2D')
         self.corrButton = QtGui.QPushButton('Correlation')
+        self.deltaAngleEdit = QtGui.QLineEdit('30')
+        self.thetaStepEdit = QtGui.QLineEdit('3')
         self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
@@ -199,8 +203,10 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         
         self.buttonsLayout.addWidget(self.FFT2Button, 0, 0, 1, 1)
 #        self.buttonsLayout.addWidget(self.fftThrEdit, 1, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.corrButton, 2, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pointsButton, 3, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.corrButton, 1, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.thetaStepEdit, 2, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.deltaAngleEdit, 3, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.pointsButton, 4, 0, 1, 1)
 #        self.buttonsLayout.addWidget(self.pointsThrEdit, 4, 0, 1, 1)
         self.buttonsLayout.addWidget(self.loadimageButton, 5, 0, 1, 1)
         self.buttonsLayout.addWidget(self.subimgNumEdit, 6, 0, 1, 1)
@@ -371,20 +377,36 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             
     def corrAnalysis(self, data): 
         
+        self.i = self.i+1
+        print('iteration step is {}'.format(self.i))        
+        
         meanAngle = self.getDirection(data)
+        print('meanAngle is {}'.format(meanAngle))
         
         if meanAngle == 666:
             return 0
         else:
-            subImgSize = np.shape(data)[0]        
+            subImgSize = np.shape(data)[0]
             
-            n = 3
+            
+            n = np.float(self.thetaStepEdit.text())
+            
+            # get the max desired angle from the user
+            angleMax = np.float(self.deltaAngleEdit.text())
+        
+            # set the angle range to look for a correlation, 179 is added
+            # because R's expansion
+            deltaAngle = np.arange(179+meanAngle-angleMax,179+meanAngle+angleMax,n,dtype=int)
+            print('deltaAngle is {}'.format(deltaAngle))
+
 #            theta = np.arange(0,180,n)
             
-            thetaSteps = np.arange(0,(180/n),1)
+#            thetaSteps = np.arange(0,(180/n),1)
+            thetaSteps = np.arange(0,np.size((deltaAngle-179)/n),1)
+            print(thetaSteps)
             phaseSteps = np.arange(0,21,1)
     
-            r = np.zeros(np.size(thetaSteps))
+            r = np.zeros(np.size(phaseSteps))
             R = np.zeros(np.size(thetaSteps)) 
     
             wvlen = 9
@@ -393,27 +415,35 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             
             for i in thetaSteps:
                 for p in phaseSteps:
-                    axonTheta = simAxon(subImgSize, wvlen, n*i, p*.025, a=0, b=1).simAxon;
+                    axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i], p*.025, a=0, b=1).simAxon;
     
                     c = corr2(data,axonTheta)
                     r[p] = c
-                    R[i-1] = np.max(r)
+                R[i-1] = np.max(r)
             
-            print('meanAngle is {}'.format(meanAngle))
-            deltaAngle = np.arange(179+meanAngle-15,179+meanAngle+15,n,dtype=int) 
-            print('deltaAngle is {}'.format(deltaAngle))
-            R = arrayExt(R)
-            if np.max(R[np.array(deltaAngle/n,dtype=int)]) > 0.1:
+            
+#           
+#            # R is extended because there might be cases in which deltAngle
+#            # exceeds 180, i.e. 170 +/- 30
+#            R = arrayExt(R)
+ 
+
+            if np.max(R) > 0.1:
                 return 1
             else:
                 return 0
 
         
-    def getDirection(self, data):        
+    def getDirection(self, data): 
         
         # gaussian filter to get low resolution image
         sigma = 4
         img = ndi.gaussian_filter(data,sigma)
+        
+        if np.sum(img)<10:
+            return 666
+        else:
+            pass
         
         # binarization of image
         thresh = threshold_otsu(img)
@@ -456,9 +486,14 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             # calculate mean angle and its standard deviation
             print('angleArr is {}'.format(angleArr))
             meanAngle = np.mean(angleArr)
-#            stdAngle = np.std(angleArr)
-
-            return meanAngle
+            stdAngle = np.std(angleArr)
+            
+            # if the std is too high it's probably the case of almost flat angles,
+            # i.e., 181, -2, 0.3, -1, 179, so I force it to give the flat angle.
+            if stdAngle > 75:
+                return 0
+            else:
+               return meanAngle
 
 if __name__ == '__main__':
 
