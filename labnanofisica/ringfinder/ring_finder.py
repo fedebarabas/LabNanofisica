@@ -138,15 +138,28 @@ class RingAnalizer(QtGui.QMainWindow):
         
         self.FFT2Button = QtGui.QPushButton('FFT 2D')
         self.corrButton = QtGui.QPushButton('Correlation')
+        self.corr2thrEdit = QtGui.QLineEdit('0.1')
+        self.thetaStepEdit = QtGui.QLineEdit('3')
+        self.deltaAngleEdit = QtGui.QLineEdit('30')
         self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
+        self.pxSizeEdit = QtGui.QLineEdit('20')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('50')
-        self.dirButton = QtGui.QPushButton('get direction')
-        self.deltaAngleEdit = QtGui.QLineEdit('30')
-        self.thetaStepEdit = QtGui.QLineEdit('3')
+        self.dirButton = QtGui.QPushButton('Get direction')
+        self.sigmaEdit = QtGui.QLineEdit('3')
+        self.intThrButton = QtGui.QPushButton('Intensity threshold')
+        self.intThrEdit = QtGui.QLineEdit('3')
+        
+        self.roiLabel = QtGui.QLabel('ROI size')
+        self.corr2thrLabel = QtGui.QLabel('Correlation threshold')
+        self.thetaStepLabel = QtGui.QLabel('Angular step (in °)')
+        self.deltaAngleLabel = QtGui.QLabel('Delta Angle (in °)')
+        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
+        
+        
         
         # Widgets' layout
         self.layout = QtGui.QGridLayout()
@@ -154,20 +167,33 @@ class RingAnalizer(QtGui.QMainWindow):
         self.layout.setColumnStretch(1, 1)
         
         self.imagegui = ImageGUI(self)
-        self.layout.addWidget(self.imagegui, 0, 0, 14, 8)
-        self.layout.addWidget(self.loadimageButton, 0, 9, 1, 1)
-        self.layout.addWidget(self.roiSizeEdit, 1, 9, 1, 1)
-        self.layout.addWidget(self.corrButton, 2, 9, 1, 1)
-        self.layout.addWidget(self.thetaStepEdit, 3, 9, 1, 1)
-        self.layout.addWidget(self.deltaAngleEdit, 4, 9, 1, 1)
-        self.layout.addWidget(self.FFT2Button, 5, 9, 1, 1)
-        self.layout.addWidget(self.fftThrEdit, 6, 9, 1, 1)
-        self.layout.addWidget(self.pointsButton, 7, 9, 1, 1)
-        self.layout.addWidget(self.pointsThrEdit, 8, 9, 1, 1)
-        self.layout.addWidget(self.dirButton,9,9,1,1)
-        self.layout.addWidget(self.filterImageButton, 10, 9, 1, 1)
-
+        self.layout.addWidget(self.imagegui, 0, 0, 18, 10)
+        self.layout.addWidget(self.loadimageButton, 0, 11, 1, 2)
+        self.layout.addWidget(self.roiLabel, 1, 11, 1, 1)
+        self.layout.addWidget(self.roiSizeEdit, 1, 12, 1, 1)
+        self.layout.addWidget(self.pxSizeEdit, 15, 12, 1, 1)
         
+        self.layout.addWidget(self.corrButton, 2, 11, 1, 2)
+        self.layout.addWidget(self.corr2thrLabel, 3, 11, 1, 1)
+        self.layout.addWidget(self.corr2thrEdit, 3, 12, 1, 1)
+        self.layout.addWidget(self.thetaStepLabel, 4, 11, 1, 1)
+        self.layout.addWidget(self.thetaStepEdit, 4, 12, 1, 1)
+        self.layout.addWidget(self.deltaAngleLabel, 5, 11, 1, 1)
+        self.layout.addWidget(self.deltaAngleEdit, 5, 12, 1, 1)
+        
+#        self.layout.addWidget(self.FFT2Button, 6, 11, 1, 2)
+#        self.layout.addWidget(self.fftThrEdit, 7, 11, 1, 1)
+        
+#        self.layout.addWidget(self.pointsButton, 8, 11, 1, 2)
+#        self.layout.addWidget(self.pointsThrEdit, 9, 11, 1, 1)
+        
+        self.layout.addWidget(self.dirButton, 10, 11, 1, 2)
+        self.layout.addWidget(self.sigmaLabel, 11, 11, 1, 1)
+        self.layout.addWidget(self.sigmaEdit, 11, 12, 1, 1)
+#        
+        self.layout.addWidget(self.filterImageButton, 12, 11, 1, 2)
+        self.layout.addWidget(self.intThrButton, 13, 11, 1, 2)
+        self.layout.addWidget(self.intThrEdit, 14, 11, 1, 1)
 
         self.roiSizeEdit.textChanged.connect(self.imagegui.updateROI)
         self.loadimageButton.clicked.connect(self.imagegui.loadImage)
@@ -176,6 +202,7 @@ class RingAnalizer(QtGui.QMainWindow):
         self.pointsButton.clicked.connect(self.imagegui.pointsAnalysis)
         self.filterImageButton.clicked.connect(self.imagegui.imageFilter)
         self.dirButton.clicked.connect(self.imagegui.getDirection)
+        self.intThrButton.clicked.connect(self.imagegui.intThreshold)
 
 class ImageGUI(pg.GraphicsLayoutWidget):
 
@@ -203,10 +230,10 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.roi.setZValue(10)  # make sure ROI is drawn above image
         
         # Contrast/color control
-        bigimg_hist = pg.HistogramLUTItem()
-        bigimg_hist.gradient.loadPreset('thermal')
-        bigimg_hist.setImageItem(self.bigimg)
-        self.addItem(bigimg_hist)
+        self.bigimg_hist = pg.HistogramLUTItem()
+        self.bigimg_hist.gradient.loadPreset('thermal')
+        self.bigimg_hist.setImageItem(self.bigimg)
+        self.addItem(self.bigimg_hist)
         
         # subimg
         self.subimg = pg.ImageItem()
@@ -222,42 +249,39 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.im = Image.open(r'labnanofisica\ringfinder\spectrin1.tif')
         self.data = np.array(self.im)
         self.bigimg.setImage(self.data)
-        bigimg_hist.setLevels(self.data.min(), self.data.max())
+        self.bigimg_hist.setLevels(self.data.min(), self.data.max())
         
         # grid, n = number of divisions in each side
-        self.setGrid(10)
+        self.setGrid(np.int(np.shape(self.data)[0]/50))
         
-        # FFT2 
-        self.FFT2img = pg.ImageItem()
-        self.FFT2img_hist = pg.HistogramLUTItem(image=self.FFT2img)
-        self.FFT2img_hist.gradient.loadPreset('thermal')
-        self.addItem(self.FFT2img_hist, row=1, col=3)
-            
-        self.fft2 = pg.PlotItem(title="FFT 2D")
-        self.fft2.addItem(self.FFT2img)
-        self.addItem(self.fft2,row=1,col=2)
+#        # FFT2 
+#        self.FFT2img = pg.ImageItem()
+#        self.FFT2img_hist = pg.HistogramLUTItem(image=self.FFT2img)
+#        self.FFT2img_hist.gradient.loadPreset('thermal')
+#        self.addItem(self.FFT2img_hist, row=1, col=3)
+#            
+#        self.fft2 = pg.PlotItem(title="FFT 2D")
+#        self.fft2.addItem(self.FFT2img)
+#        self.addItem(self.fft2,row=1,col=2)
+
+#        # Points
+#        self.pointsImg = pg.ImageItem()
+#        self.pointsImg_hist = pg.HistogramLUTItem(image=self.pointsImg)
+#        self.pointsImg_hist.gradient.loadPreset('thermal')
+#        self.addItem(self.pointsImg_hist, row=1, col=5)
+#            
+#        self.pointsPlot = pg.PlotItem(title="Points")
+#        self.pointsPlot.addItem(self.pointsImg)
+#        self.addItem(self.pointsPlot,row=1,col=4)
 
 
-
-        # points
-        self.pointsImg = pg.ImageItem()
-        self.pointsImg_hist = pg.HistogramLUTItem(image=self.pointsImg)
-        self.pointsImg_hist.gradient.loadPreset('thermal')
-        self.addItem(self.pointsImg_hist, row=1, col=5)
-            
-        self.pointsPlot = pg.PlotItem(title="Points")
-        self.pointsPlot.addItem(self.pointsImg)
-        self.addItem(self.pointsPlot,row=1,col=4)
-        
-
-
+        # Correlation
         self.pCorr = pg.PlotItem(title="Correlation")
         self.addItem(self.pCorr,row=0,col=2)
        
        
-       # optimal correlation visualization
-        
-        self.vb4 = self.addViewBox(row=0,col=4)
+        # optimal correlation visualization     
+        self.vb4 = self.addViewBox(row=1,col=2)
         self.img1 = pg.ImageItem()
         self.img2 = pg.ImageItem()
         self.vb4.addItem(self.img1)
@@ -269,17 +293,27 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         overlay_hist.gradient.loadPreset('thermal')
         overlay_hist.setImageItem(self.img2)
         overlay_hist.setImageItem(self.img1)
-        self.addItem(overlay_hist, row=0, col=5)
+        self.addItem(overlay_hist, row=1, col=3)
       
         self.roi.sigRegionChanged.connect(self.updatePlot)
 
 
         
     def loadImage(self):
+        self.vb1.clear()
+        pxSize = np.float(self.main.pxSizeEdit.text())
+        subimgPxSize = 1000/pxSize
         self.filename = getFilename("Load image", [('Tiff file', '.tif')])
         self.loadedImage = Image.open(self.filename)
         self.data = np.array(self.loadedImage)
+        self.bigimg = pg.ImageItem()
+        self.vb1.addItem(self.bigimg)
+        self.vb1.setAspectLocked(True)
         self.bigimg.setImage(self.data)
+        self.bigimg_hist.setImageItem(self.bigimg)
+        self.addItem(self.bigimg_hist)
+        self.vb1.addItem(self.roi)
+        self.setGrid(np.int(np.shape(self.data)[0]/subimgPxSize))
         
     # Callbacks for handling user interaction
         
@@ -438,6 +472,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
     def corrAnalysis(self):        
         
+        corr2thr = np.float(self.main.corr2thrEdit.text())
         self.pCorr.clear()
         
         n = np.float(self.main.thetaStepEdit.text())
@@ -451,7 +486,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         R22 = np.zeros(np.size(self.thetaSteps))
         R22ph = np.zeros(np.size(self.thetaSteps))
         
-        wvlen = 9
+        wvlen = 180/np.float(self.main.pxSizeEdit.text())
         
         # for now we correlate with the full sin2D pattern
         
@@ -475,7 +510,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         pen1 = pg.mkPen(color=(0,255,100), width=2, style=QtCore.Qt.SolidLine, antialias = True)
         pen2 = pg.mkPen(color=(255,50,60), width=1, style=QtCore.Qt.SolidLine, antialias = True)
         self.pCorr.plot(self.theta, R22, pen=pen1)
-        self.pCorr.plot(self.theta, 0.1*np.ones(np.size(self.theta)),pen=pen2)
+        self.pCorr.plot(self.theta, corr2thr*np.ones(np.size(self.theta)),pen=pen2)
         self.pCorr.showGrid(x=False, y=False)
         
         if self.meanAngle != None:
@@ -490,16 +525,25 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         # extension to deal with angles close to 0 or 180
         R22 = arrayExt(R22)
         deltaAngle = np.arange(180+self.meanAngle-angleMax,180+self.meanAngle+angleMax,dtype=int)
-        if np.max(R22[np.array(deltaAngle/n,dtype = int)]) > 0.1:
+        
+        if np.max(R22[np.array(deltaAngle/n,dtype = int)]) > corr2thr:
             print('¡HAY ANILLOS!')
         else:
             print('NO HAY ANILLOS')
 
-                
+
+    def intThreshold(self):
+        thr = np.float(self.intThrEdit.text())
+        intMean = np.mean(self.data)
+        if np.mean(self.selected) < intMean/thr:
+            print('BACKGROUND')
+        else:
+            print('NEURON')
+                      
         
     def imageFilter(self):
         
-        sigma = 4
+        sigma = np.float(self.main.sigmaEdit.text())
         img = ndi.gaussian_filter(self.data,sigma)
     
         thresh = threshold_otsu(img)
@@ -511,7 +555,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
     def getDirection(self):
         
         # gaussian filter to get low resolution image
-        sigma = 4
+        sigma = np.float(self.main.sigmaEdit.text())
         img = ndi.gaussian_filter(self.selected,sigma)
         
         # binarization of image

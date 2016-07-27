@@ -200,16 +200,16 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
         self.subimgNumEdit = QtGui.QLineEdit('10')
+        self.sigmaEdit = QtGui.QLineEdit('3')
         
         self.buttonsLayout.addWidget(self.FFT2Button, 0, 0, 1, 1)
-#        self.buttonsLayout.addWidget(self.fftThrEdit, 1, 0, 1, 1)
         self.buttonsLayout.addWidget(self.corrButton, 1, 0, 1, 1)
         self.buttonsLayout.addWidget(self.thetaStepEdit, 2, 0, 1, 1)
         self.buttonsLayout.addWidget(self.deltaAngleEdit, 3, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pointsButton, 4, 0, 1, 1)
-#        self.buttonsLayout.addWidget(self.pointsThrEdit, 4, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.loadimageButton, 5, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.subimgNumEdit, 6, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.sigmaEdit, 4, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.pointsButton, 5, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.loadimageButton, 6, 0, 1, 1)
+        self.buttonsLayout.addWidget(self.subimgNumEdit, 7, 0, 1, 1)
         
         self.loadimageButton.clicked.connect(self.loadImage)
         def rFpoints():
@@ -415,7 +415,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             
             for i in thetaSteps:
                 for p in phaseSteps:
-                    axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i], p*.025, a=0, b=1).simAxon;
+                    axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i], p*.025, a=0, b=2).simAxon;
     
                     c = corr2(data,axonTheta)
                     r[p] = c
@@ -428,7 +428,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
 #            R = arrayExt(R)
  
 
-            if np.max(R) > 0.1:
+            if np.max(R) > 0.095:
                 return 1
             else:
                 return 0
@@ -437,7 +437,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
     def getDirection(self, data): 
         
         # gaussian filter to get low resolution image
-        sigma = 4
+        sigma = np.float(self.sigmaEdit.text())
         img = ndi.gaussian_filter(data,sigma)
         
         if np.sum(img)<10:
@@ -490,8 +490,8 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             
             # if the std is too high it's probably the case of almost flat angles,
             # i.e., 181, -2, 0.3, -1, 179, so I force it to give the flat angle.
-            if stdAngle > 75:
-                return 0
+            if stdAngle > 40:
+                return 666
             else:
                return meanAngle
 
