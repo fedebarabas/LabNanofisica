@@ -42,7 +42,7 @@ class sin2D:
 #        plt.imshow(self.grating, cmap='gray')                    # display
         
 class simAxon(sin2D):
-        def __init__(self, imSize=100, wvlen=10, theta=15, phase=.25, a=20, b=2, *args, **kwargs):
+        def __init__(self, imSize=50, wvlen=10, theta=15, phase=.25, a=0, b=2, *args, **kwargs):
 
             super().__init__(*args, **kwargs)
             
@@ -51,9 +51,13 @@ class simAxon(sin2D):
             self.theta = theta                              # grating orientation
             self.phase = phase                            # phase (0 -> 1)            
             
-            self.grating2 = sin2D(self.imSize, b*self.wvlen, 90 - self.theta, self.phase).sin2d**b;   # sin2D.sin2d squared in order to always get positive values
-            self.mask = sin2D(self.imSize,2*self.imSize,-self.theta+90,phase).sin2d**a
-            
+            if b%2==0:
+                self.grating2 = sin2D(self.imSize, 2*self.wvlen, 90 - self.theta, self.phase).sin2d**b;   # sin2D.sin2d squared in order to always get positive values
+                self.mask = sin2D(self.imSize,2*self.imSize,-self.theta+90,phase).sin2d**a
+            else: 
+                self.grating2 = sin2D(self.imSize, self.wvlen, 90 - self.theta, self.phase).sin2d**b;   # sin2D.sin2d squared in order to always get positive values
+                self.mask = sin2D(self.imSize,2*self.imSize,-self.theta+90,phase).sin2d**a
+                
             self.simAxon = self.grating2*(self.mask)        # make simulated axon
         
     
