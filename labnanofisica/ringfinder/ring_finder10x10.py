@@ -165,8 +165,13 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         inputImgHist.gradient.loadPreset('thermal')
         inputImgHist.setImageItem(self.inputImg)
         self.inputWidget.addItem(inputImgHist)
+<<<<<<< Updated upstream
 
         imInput = Image.open(r'labnanofisica\ringfinder\spectrin1.tif')
+=======
+        
+        imInput = Image.open(r'/Users/Luciano/Documents/LabNanofisica/labnanofisica/ringfinder/spectrin1.tif')
+>>>>>>> Stashed changes
         self.inputData = np.array(imInput)
         self.inputImg.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])

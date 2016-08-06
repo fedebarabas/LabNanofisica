@@ -265,7 +265,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.addItem(self.dirPlot, row=1, col=0)
 
         # load image
-        self.im = Image.open(r'labnanofisica\ringfinder\spectrin1.tif')
+        self.im = Image.open(r'/Users/Luciano/Documents/LabNanofisica/labnanofisica/ringfinder/spectrin1.tif')
         self.data = np.array(self.im)
         self.bigimg.setImage(self.data)
         self.bigimg_hist.setLevels(self.data.min(), self.data.max())
