@@ -473,10 +473,15 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                             # save the three points
                             D.append([points[i], points[j], points[k]])
                             # plot connections
-                            pen = pg.mkPen(color=(0, 255, 100), width=1, style=QtCore.Qt.SolidLine, antialias=True)
-                            self.pointsPlot.plot([points[i][0], points[j][0], points[k][0]],
-                                                 [points[i][1], points[j][1], points[k][1]],
-                                                 pen=pen, symbolBrush=(0, 204, 122), symbolPen='w')
+                            pen = pg.mkPen(color=(0, 255, 100), width=1, 
+                                           style=QtCore.Qt.SolidLine, 
+                                           antialias=True)
+                            self.pointsPlot.plot([points[i][0], points[j][0], 
+                                                 points[k][0]], [points[i][1],
+                                                 points[j][1], points[k][1]],
+                                                 pen=pen,
+                                                 symbolBrush=(0, 204, 122),
+                                                 symbolPen='w')
                         else:
                             pass
                 else:
@@ -616,10 +621,10 @@ class ImageGUI(pg.GraphicsLayoutWidget):
             m = (p1[0]-p0[0])/(p1[1]-p0[1])
             angle = (180/np.pi)*np.arctan(m)
 
-#            if angle < 0:
-#                angle = angle + 180
-#            else:
-#                pass
+            if angle < 0:
+                angle = angle + 180
+            else:
+                pass
 
             angleArr.append(angle)
 
