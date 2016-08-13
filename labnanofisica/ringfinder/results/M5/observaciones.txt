@@ -1,3 +1,0 @@
-umbral de correlación
-
-r = 0,095
