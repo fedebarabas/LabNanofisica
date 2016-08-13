@@ -6,43 +6,19 @@ Created on Wed Oct  1 13:41:48 2014
 """
 
 from scipy import ndimage as ndi
-#import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
-# from skimage.feature import canny
 from skimage import filters
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
-# from skimage import data, img_as_float
-
-# import matplotlib.image as mpimg
 import numpy as np
 from PIL import Image
 from labnanofisica.ringfinder.neurosimulations import simAxon
-
-# import labnanofisica.sm.maxima as maxima
-
-# from scipy import ndimage as ndi
-# import matplotlib.pyplot as plt
 from skimage.filters import threshold_otsu, sobel
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-# import pyqtgraph.console
-# from pyqtgraph.dockarea import Dock, DockArea
-# import pyqtgraph.ptime as ptime
 from tkinter import Tk, filedialog, simpledialog
 
-# from scipy.special import erf
-# from scipy.optimize import minimize
-# from scipy.ndimage import label
-# from scipy.ndimage.filters import convolve, maximum_filter
-# from scipy.ndimage.measurements import maximum_position, center_of_mass
-
-# import labnanofisica.sm.tools as tools
-# import labnanofisica.gaussians as gaussians
-
-# import warnings
-# warnings.filterwarnings("error")
 
 
 def getFilename(title, types, initialdir=None):
@@ -393,9 +369,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         # plot local maxima
         self.fft2.plot(coord[:, 0], coord[:, 1], pen=None,
                        symbolBrush=(0, 102, 204), symbolPen='w')
-#        self.fft2.plot(maxfinder.positions[:, 0], maxfinder.positions[:, 1],
-#                       pen=None, symbolBrush=(204,102,0), symbolPen='w')
-
+                       
         # aux arrays: ringBool is checked to define if there are rings or not
         ringBool = []
 
@@ -666,236 +640,6 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         pxSize = np.float(self.main.pxSizeEdit.text())
         subimgPxSize = 1000/pxSize
         self.setGrid(np.int(np.shape(self.data)[0]/subimgPxSize))
-
-"""
-Tormenta code for finding maxima
-"""
-
-
-## data-type definitions
-#def fit_par(fit_model):
-#    if fit_model is '2d':
-#        return [('amplitude_fit', float), ('fit_x', float), ('fit_y', float),
-#                ('background_fit', float)]
-#
-#
-#def results_dt(fit_parameters):
-#    parameters = [('frame', int), ('maxima_x', int), ('maxima_y', int),
-#                  ('photons', float), ('sharpness', float),
-#                  ('roundness', float), ('brightness', float)]
-#    return np.dtype(parameters + fit_parameters)
-#
-#
-#class Maxima():
-#    """ Class defined as the local maxima in an image frame. """
-#
-#    def __init__(self, image, fit_par=None, dt=0, fw=None, win_size=None,
-#                 kernel=None, xkernel=None, bkg_image=None):
-#
-#        self.image = image
-#        self.bkg_image = bkg_image
-#
-#        # Noise removal by convolving with a null sum gaussian. Its FWHM
-#        # has to match the one of the objects we want to detect.
-#        try:
-#            self.fwhm = fw
-#            self.win_size = win_size
-#            self.kernel = kernel
-#            self.xkernel = xkernel
-#            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
-#        except RuntimeError:
-#            # If the kernel is None, I assume all the args must be calculated
-#            self.fwhm = gaussians.get_fwhm(670, 1.42) / 120
-#            self.win_size = int(np.ceil(self.fwhm))
-#            self.kernel = gaussians.kernel(self.fwhm)
-#            self.xkernel = gaussians.xkernel(self.fwhm)
-#            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
-#
-#        # TODO: FIXME
-#        if self.bkg_image is None:
-#            self.bkg_image = self.image_conv
-#
-#        self.fit_par = fit_par
-#        self.dt = dt
-#
-#    def find_old(self, alpha=5):
-#        """Local maxima finding routine.
-#        Alpha is the amount of standard deviations used as a threshold of the
-#        local maxima search. Size is the semiwidth of the fitting window.
-#        Adapted from http://stackoverflow.com/questions/16842823/
-#                            peak-detection-in-a-noisy-2d-array
-#        """
-#        self.alpha = alpha
-#
-#        # Image mask
-#        self.imageMask = np.zeros(self.image.shape, dtype=bool)
-#
-#        self.mean = np.mean(self.image_conv)
-#        self.std = np.sqrt(np.mean((self.image_conv - self.mean)**2))
-#        self.threshold = self.alpha*self.std + self.mean
-#
-#        # Estimate for the maximum number of maxima in a frame
-#        nMax = self.image.size // (2*self.win_size + 1)**2
-#        self.positions = np.zeros((nMax, 2), dtype=int)
-#        nPeak = 0
-#
-#        while 1:
-#            k = np.argmax(np.ma.masked_array(self.image_conv, self.imageMask))
-#
-#            # index juggling
-#            j, i = np.unravel_index(k, self.image.shape)
-#            if(self.image_conv[j, i] >= self.threshold):
-#
-#                # Saving the peak
-#                self.positions[nPeak] = tuple([j, i])
-#
-#                # this is the part that masks already-found maxima
-#                x = np.arange(i - self.win_size, i + self.win_size + 1,
-#                              dtype=np.int)
-#                y = np.arange(j - self.win_size, j + self.win_size + 1,
-#                              dtype=np.int)
-#                xv, yv = np.meshgrid(x, y)
-#                # the clip handles cases where the peak is near the image edge
-#                self.imageMask[yv.clip(0, self.image.shape[0] - 1),
-#                               xv.clip(0, self.image.shape[1] - 1)] = True
-#                nPeak += 1
-#            else:
-#                break
-#
-#        if nPeak > 0:
-#            self.positions = self.positions[:nPeak]
-#            self.drop_overlapping()
-#            self.drop_border()
-#
-#    def find(self, alpha=5):
-#        """
-#        Takes an image and detect the peaks usingthe local maximum filter.
-#        Returns a boolean mask of the peaks (i.e. 1 when
-#        the pixel's value is the neighborhood maximum, 0 otherwise). Taken from
-#        http://stackoverflow.com/questions/9111711/
-#        get-coordinates-of-local-maxima-in-2d-array-above-certain-value
-#        """
-#        self.alpha = alpha
-#
-#        image_max = ndi.filters.maximum_filter(self.image_conv, self.win_size)
-#        maxima = (self.image_conv == image_max)
-#
-#        self.mean = np.mean(self.image_conv)
-#        self.std = np.sqrt(np.mean((self.image_conv - self.mean)**2))
-#        self.threshold = self.alpha*self.std + self.mean
-#
-#        diff = (image_max > self.threshold)
-#        maxima[diff == 0] = 0
-#
-#        labeled, num_objects = ndi.label(maxima)
-#        if num_objects > 0:
-#            self.positions = ndi.measurements.maximum_position(self.image, labeled,
-#                                              range(1, num_objects + 1))
-#            self.positions = np.array(self.positions).astype(int)
-#            self.drop_overlapping()
-#            self.drop_border()
-#        else:
-#            self.positions = np.zeros((0, 2), dtype=int)
-#
-#    def drop_overlapping(self):
-#        """Drop overlapping spots."""
-#        n = len(self.positions)
-#        if n > 1:
-#            self.positions = tools.dropOverlapping(self.positions,
-#                                                   2*self.win_size + 1)
-#            self.overlaps = n - len(self.positions)
-#        else:
-#            self.overlaps = 0
-#
-#    def drop_border(self):
-#        """ Drop near-the-edge spots. """
-#        ws = self.win_size
-#        lx = self.image.shape[0] - ws
-#        ly = self.image.shape[1] - ws
-#        keep = ((self.positions[:, 0] < lx) & (self.positions[:, 0] > ws) &
-#                (self.positions[:, 1] < ly) & (self.positions[:, 1] > ws))
-#        self.positions = self.positions[keep]
-#
-#    def getParameters(self):
-#        """Calculate the roundness, brightness, sharpness"""
-#
-#        # Results storage
-#        try:
-#            self.results = np.zeros(len(self.positions), dtype=self.dt)
-#        except TypeError:
-#            self.fit_model = '2d'
-#            self.fit_par = fit_par(self.fit_model)
-#            self.dt = results_dt(self.fit_par)
-#            self.results = np.zeros(len(self.positions), dtype=self.dt)
-#
-#        self.results['maxima_x'] = self.positions[:, 0]
-#        self.results['maxima_y'] = self.positions[:, 1]
-#
-#        mask = np.zeros((2*self.win_size + 1, 2*self.win_size + 1), dtype=bool)
-#        mask[self.win_size, self.win_size] = True
-#
-#        i = 0
-#        for maxx in self.positions:
-#            # tuples make indexing easier (see below)
-#            p = tuple(maxx)
-#            masked = np.ma.masked_array(self.radius(self.image, maxx), mask)
-#
-#            # Sharpness
-#            sharp_norm = self.image_conv[p] * np.mean(masked)
-#            self.results['sharpness'][i] = 100*self.image[p]/sharp_norm
-#            # Roundness
-#            hx = np.dot(self.radius(self.image, maxx)[2, :], self.xkernel)
-#            hy = np.dot(self.radius(self.image, maxx)[:, 2], self.xkernel)
-#            self.results['roundness'][i] = 2 * (hy - hx) / (hy + hx)
-#            # Brightness
-#            bright_norm = self.alpha * self.std
-#            self.results['brightness'][i] = 2.5*np.log(self.image_conv[p] /
-#                                                       bright_norm)
-#
-#            i += 1
-#
-#    def area(self, image, n):
-#        """Returns the area around the local maximum number n."""
-#        coord = self.positions[n]
-#        x1 = coord[0] - self.win_size
-#        x2 = coord[0] + self.win_size + 1
-#        y1 = coord[1] - self.win_size
-#        y2 = coord[1] + self.win_size + 1
-#        return image[x1:x2, y1:y2]
-#
-#    def radius(self, image, coord):
-#        """Returns the area around the entered point."""
-#        x1 = coord[0] - self.win_size
-#        x2 = coord[0] + self.win_size + 1
-#        y1 = coord[1] - self.win_size
-#        y2 = coord[1] + self.win_size + 1
-#        return image[x1:x2, y1:y2]
-#
-#    def fit(self, fit_model='2d'):
-#
-#        self.mean_psf = np.zeros(self.area(self.image, 0).shape)
-#
-#        for i in np.arange(len(self.positions)):
-#
-#            # Fit and store fitting results
-#            area = self.area(self.image, i)
-#            bkg = self.area(self.bkg_image, i)
-#            fit = fit_area(area, self.fwhm, bkg)
-#            offset = self.positions[i] - self.win_size
-#            fit[1] += offset[0]
-#            fit[2] += offset[1]
-#
-#            # Can I do this faster if fit_area returned a struct array?
-#            m = 0
-#            for par in self.fit_par:
-#                self.results[par[0]][i] = fit[m]
-#                m += 1
-#
-#            # Background-sustracted measured PSF
-#            bkg_subtract = area - fit[-1]
-#            # photons from molecule calculation
-#            self.results['photons'][i] = np.sum(bkg_subtract)
-#            self.mean_psf += bkg_subtract / self.results['photons'][i]
 
 if __name__ == '__main__':
 

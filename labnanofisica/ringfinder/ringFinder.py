@@ -8,23 +8,15 @@ Created on Fri Jul 15 12:25:40 2016
 from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
-#from skimage.feature import canny
 from skimage import filters
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 from skimage.filters import threshold_otsu, sobel
-#from skimage import img_as_float
-#import matplotlib.pyplot as plt
-#import matplotlib.image as mpimg
 import numpy as np
 from PIL import Image
 from labnanofisica.ringfinder.neurosimulations import simAxon
-#from scipy import ndimage as ndi
-#import matplotlib.pyplot as plt
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-#from pyqtgraph.dockarea import Dock, DockArea
-#import pyqtgraph.ptime as ptime
 from tkinter import Tk, filedialog, simpledialog
 
 
@@ -42,6 +34,7 @@ def getFilename(title, types, initialdir=None):
 
 
 def corr2(a, b):
+    """2D pearson coefficient of two matrixes a and b"""
 
     # Calculating mean values
     AM = np.mean(a)
@@ -60,6 +53,7 @@ def corr2(a, b):
 
 
 def dist(a, b):
+    """Euclidean distance between a and b"""
 
     out = np.linalg.norm(a-b)
 
@@ -67,6 +61,7 @@ def dist(a, b):
 
 
 def cosTheta(a, b):
+    """Angle between two vectors a and b"""
 
     if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
         return 0
@@ -91,6 +86,8 @@ def blockshaped(arr, nrows, ncols):
 
 
 def firstNmax(coord, image, N):
+    """Returns the first N max in an image from an array of coord of the max
+       in the image"""
 
     if np.shape(coord)[0] < N:
         return []
@@ -111,6 +108,7 @@ def firstNmax(coord, image, N):
 
 
 def arrayExt(array):
+    """Extends an array in a specific way"""
 
     y = array[::-1]
     z = []
@@ -273,14 +271,6 @@ class RingAnalizer(QtGui.QMainWindow):
         n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
         self.setGrid(self.inputVb, n)
 
-#    def cropImage(self):
-#
-#        n = self.subimgNum
-#        self.blocksInput = blockshaped(self.inputData, self.inputDataSize/n,
-#                                       self.inputDataSize/n)
-#
-#        return self.blocksInput
-
     def setGrid(self, image, n):
 
         pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
@@ -299,7 +289,10 @@ class RingAnalizer(QtGui.QMainWindow):
             image.addItem(ylines[i])
 
     def RingFinder(self, algorithm):
-
+        """RingFinder handles the input data, and then evaluates every subimg
+        using the given algorithm which decides if there are rings or not.
+        Subsequently gives the output data and plots it"""
+        
         # initialize variables
         self.localCorr = []
         a = 0
@@ -368,7 +361,9 @@ class RingAnalizer(QtGui.QMainWindow):
         plt.show()
 
     def FFT2(self, data):
-
+        """FFT 2D analysis of actin rings. Looks for maxima at 180 nm in the
+        frequency spectrum"""
+        
         # calculate new fft2
         fft2output = np.real(np.fft.fftshift(np.fft.fft2(data)))
 
@@ -413,7 +408,9 @@ class RingAnalizer(QtGui.QMainWindow):
             return 0
 
     def points(self, data):
-
+        """Finds local maxima in the image (points) and then if there are
+        three or more in a row considers that to be actin rings"""        
+        
         self.pointsThr = .3
         points = peak_local_max(data, min_distance=6,
                                 threshold_rel=self.pointsThr)
@@ -464,6 +461,8 @@ class RingAnalizer(QtGui.QMainWindow):
             return 0
 
     def corr2(self, data):
+        """Correlates the image with a given sinusoidal pattern"""        
+        
 
         # correlation thr set by the user
         corr2thr = np.float(self.corr2thrEdit.text())
@@ -529,7 +528,8 @@ class RingAnalizer(QtGui.QMainWindow):
                 return 0
 
     def getDirection(self, data):
-
+        """Returns the direction (angle) of the neurite in the image"""        
+        
         # dataSize
         dataSize = np.shape(data)[0]
 
