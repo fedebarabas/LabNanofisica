@@ -123,7 +123,7 @@ def arrayExt(array):
     return z
 
 
-class RingAnalizer10x10(QtGui.QMainWindow):
+class RingAnalizer(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
 
@@ -134,7 +134,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         # number of subimg (side)
         self.subimgNum = 10
 
-        self.setWindowTitle('RingAnalizer')
+        self.setWindowTitle('Gollum: the Ring Finder')
 
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
@@ -166,7 +166,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         inputImgHist.setImageItem(self.inputImg)
         self.inputWidget.addItem(inputImgHist)
 
-        imInput = Image.open(r'/Users/Luciano/Documents/LabNanofisica/labnanofisica/ringfinder/test data/STED/16.06.30 Espectrina Georgina/Atto647N/tiff/STED2.tif')
+        imInput = Image.open(r'C:\Users\luciano.masullo\Documents\GitHub\LabNanofisica\labnanofisica/ringfinder/test data/STED/16.06.30 Espectrina Georgina/Atto647N/tiff/STED2.tif')
         self.inputData = np.array(imInput)
         self.inputImg.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])
@@ -202,7 +202,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
 #        self.subimgNumEdit = QtGui.QLineEdit('10')
-        self.sigmaEdit = QtGui.QLineEdit('3')
+        self.sigmaEdit = QtGui.QLineEdit('60')
         self.lineLengthEdit = QtGui.QLineEdit('0.2')
         self.pxSizeEdit = QtGui.QLineEdit('20')
         self.corr2thrEdit = QtGui.QLineEdit('0.1')
@@ -300,19 +300,26 @@ class RingAnalizer10x10(QtGui.QMainWindow):
 
     def RingFinder(self, algorithm):
 
+        # initialize variables
+        self.localCorr = []
         a = 0
         self.outputImg.clear()
         self.outputResult.clear()
+        
+        # m is such that the image has m x m subimages
         m = self.subimgNum
+
+        # shape the data into the subimg that we need for the analysis
         self.blocksInput = blockshaped(self.inputData, self.inputDataSize/m,
                                        self.inputDataSize/m)
+                                       
+        # initialize the matrix with the values of 1 and 0 (rings or not)                              
         M = np.zeros(m**2)
 #        intTot = np.sum(self.inputData)
-#        print(intTot)
 
         for i in np.arange(0, np.shape(self.blocksInput)[0]):
-
-            # algorithm for FFT 2D
+            
+            # for every subimg, evaluate it, with the given algorithm
             if algorithm(self.blocksInput[i, :, :]):
 
 #            if np.sum(self.blocksInput[i, :, :]) > (intTot/m**2) and algorithm(self.blocksInput[i, :, :]):
@@ -322,17 +329,43 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             else:
                 M[i] = 0
 
+        # code for visualization of the output
         M1 = M.reshape(m, m)
-        print(np.shape(M1))
-        print(a)
         self.outputData = np.kron(M1, np.ones((self.inputDataSize/m,
                                                self.inputDataSize/m)))
         self.outputImg.setImage(self.inputData)
         self.outputResult.setImage(self.outputData)
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
-
+        
+        print(self.localCorr)
+        print(np.size(self.localCorr))
 #        self.setGrid(self.outputVb,n=10)
+#        
+#        # plot histogram of the correlation values
+#        plt.figure(0)
+#        plt.subplot()
+#        plt.hist(self.localCorr)
+#        plt.title("Correlations Histogram")
+#        plt.xlabel("Value")
+#        plt.ylabel("Frequency")
+#        
+        plt.figure()
+        data = np.array(self.localCorr).reshape(m,m)
+        data = np.rot90(data)
+        data = np.flipud(data)
+        heatmap = plt.pcolor(data)
+
+        for y in range(data.shape[0]):
+            for x in range(data.shape[1]):
+                plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
+                         horizontalalignment='center',
+                         verticalalignment='center',
+                         )
+                         
+        plt.colorbar(heatmap)
+
+        plt.show()
 
     def FFT2(self, data):
 
@@ -444,6 +477,7 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             meanAngle = self.getDirection(dataRot)-90
 
         if meanAngle == 666:
+            self.localCorr.append(0)
             return 0
         else:
             subImgSize = np.shape(data)[0]
@@ -462,7 +496,6 @@ class RingAnalizer10x10(QtGui.QMainWindow):
             print('deltaAngle is {}'.format(deltaAngle))
 
             thetaSteps = np.arange(0, np.size((deltaAngle-179)/n), 1)
-
             # phase steps are set to 20, TO DO: explore this parameter
             phaseSteps = np.arange(0, 21, 1)
 
@@ -487,7 +520,9 @@ class RingAnalizer10x10(QtGui.QMainWindow):
                     corrPhase[p] = c
                 # saves the correlation for the best p, and given angle i
                 corrAngle[i-1] = np.max(corrPhase)
-
+            
+            self.localCorr.append(np.max(corrAngle))            
+            
             if np.max(corrAngle) > corr2thr:
                 return 1
             else:
@@ -500,7 +535,9 @@ class RingAnalizer10x10(QtGui.QMainWindow):
 
         # gaussian filter to get low resolution image
         sigma = np.float(self.sigmaEdit.text())
-        img = ndi.gaussian_filter(data, sigma)
+        pxSize = np.float(self.pxSizeEdit.text())
+        sigma_px = sigma/pxSize
+        img = ndi.gaussian_filter(data, sigma_px)
 
         # TO DO: good cond on intensity
         if np.sum(img) < 10:
@@ -561,6 +598,6 @@ if __name__ == '__main__':
 
     app = QtGui.QApplication([])
 
-    win = RingAnalizer10x10()
+    win = RingAnalizer()
     win.show()
     app.exec_()

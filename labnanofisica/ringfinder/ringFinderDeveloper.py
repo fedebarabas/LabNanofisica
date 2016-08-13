@@ -128,7 +128,7 @@ class RingAnalizer(QtGui.QMainWindow):
 
         super().__init__(*args, **kwargs)
 
-        self.setWindowTitle('RingAnalizer')
+        self.setWindowTitle('Ring Finder Developer')
 
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
@@ -150,17 +150,17 @@ class RingAnalizer(QtGui.QMainWindow):
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('50')
         self.dirButton = QtGui.QPushButton('Get direction')
-        self.sigmaEdit = QtGui.QLineEdit('3')
+        self.sigmaEdit = QtGui.QLineEdit('60')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
         self.intThrEdit = QtGui.QLineEdit('3')
-        self.lineLengthEdit = QtGui.QLineEdit('.2')
+        self.lineLengthEdit = QtGui.QLineEdit('.4')
         self.wvlenEdit = QtGui.QLineEdit('180')
 
         self.roiLabel = QtGui.QLabel('ROI size (px)')
         self.corr2thrLabel = QtGui.QLabel('Correlation threshold')
         self.thetaStepLabel = QtGui.QLabel('Angular step (°)')
         self.deltaAngleLabel = QtGui.QLabel('Delta Angle (°)')
-        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
+        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter (nm)')
         self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
         self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
         self.intThrLabel = QtGui.QLabel('# of times from mean intensity')
@@ -265,7 +265,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.addItem(self.dirPlot, row=1, col=0)
 
         # load image
-        self.im = Image.open(r'/Users/Luciano/Documents/LabNanofisica/labnanofisica/ringfinder/spectrin1.tif')
+        self.im = Image.open(r'C:\Users\luciano.masullo\Documents\GitHub\LabNanofisica\labnanofisica\ringfinder\spectrin1.tif')
         self.data = np.array(self.im)
         self.bigimg.setImage(self.data)
         self.bigimg_hist.setLevels(self.data.min(), self.data.max())
@@ -492,11 +492,6 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         else:
             print('NO HAY ANILLOS')
 
-
-#        print(D)
-#        print(len(D))
-#        print(np.shape(D))
-
     def corr2(self):
 
         corr2thr = np.float(self.main.corr2thrEdit.text())
@@ -505,13 +500,12 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         n = np.float(self.main.thetaStepEdit.text())
         theta = np.arange(0, 180, n)
 
-        self.thetaSteps = np.arange(0, (180/n), 1)
-        self.phaseSteps = np.arange(0, 21, 1)
+        thetaSteps = np.arange(0, (180/n), 1)
+        phaseSteps = np.arange(0, 21, 1)
 
-        self.R = np.zeros(np.size(self.thetaSteps))
-        self.R2 = np.zeros(np.size(self.phaseSteps))
-        R22 = np.zeros(np.size(self.thetaSteps))
-        R22ph = np.zeros(np.size(self.thetaSteps))
+        corrPhase = np.zeros(np.size(phaseSteps))
+        corrAngle = np.zeros(np.size(thetaSteps))
+        corrPhaseArg = np.zeros(np.size(thetaSteps))
 
         wvlen_nm = np.float(self.main.wvlenEdit.text())  # wvlen in nm
         pxSize = np.float(self.main.pxSizeEdit.text())
@@ -519,19 +513,20 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         sinPower = np.float(self.main.sinPowerEdit.text())
 
         # now we correlate with the full sin2D pattern
-        for i in self.thetaSteps:
-            for p in self.phaseSteps:
+        for i in thetaSteps:
+            for p in phaseSteps:
                 self.axonTheta = simAxon(imSize=self.subimgSize, wvlen=wvlen,
                                          theta=n*i, phase=p*.025, a=0,
                                          b=sinPower).simAxon
                 r = corr2(self.selected, self.axonTheta)
-                self.R2[p] = r
-            R22[i-1] = np.max(self.R2)
-            # R22ph saves the phase that maximizes correlation
-            R22ph[i-1] = .025*np.argmax(self.R2)
+                corrPhase[p] = r
+            corrAngle[i-1] = np.max(corrPhase)
+            # corrPhaseArg saves the phase that maximizes correlation
+            corrPhaseArg[i-1] = .025*np.argmax(corrPhase)
 
-        thetaMax = theta[np.argmax(R22)]
-        phaseMax = R22ph[np.argmax(R22)]
+        # plot best correlation with the image
+        thetaMax = theta[np.argmax(corrAngle)]
+        phaseMax = corrPhaseArg[np.argmax(corrAngle)]
 
         self.bestAxon = simAxon(imSize=self.subimgSize, wvlen=wvlen,
                                 theta=thetaMax, phase=phaseMax,
@@ -544,10 +539,13 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                         style=QtCore.Qt.SolidLine, antialias=True)
         pen2 = pg.mkPen(color=(255, 50, 60), width=1,
                         style=QtCore.Qt.SolidLine, antialias=True)
-        self.pCorr.plot(theta, R22, pen=pen1)
+
+        # plot the threshold of correlation chosen by the user
+        self.pCorr.plot(theta, corrAngle, pen=pen1)
         self.pCorr.plot(theta, corr2thr*np.ones(np.size(theta)), pen=pen2)
         self.pCorr.showGrid(x=False, y=False)
 
+        # plot the area given by the direction (meanAngle) and the deltaAngle
         if self.meanAngle is not None:
             angleMax = np.float(self.main.deltaAngleEdit.text())
             deltaAngle = np.arange(self.meanAngle-angleMax,
@@ -560,11 +558,12 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.pCorr.showGrid(x=True, y=True)
 
         # extension to deal with angles close to 0 or 180
-        R22 = arrayExt(R22)
+        corrAngle = arrayExt(corrAngle)
         deltaAngle = np.arange(180+self.meanAngle-angleMax,
                                180+self.meanAngle+angleMax, dtype=int)
 
-        if np.max(R22[np.array(deltaAngle/n, dtype=int)]) > corr2thr:
+        # decide wether there are rings or not
+        if np.max(corrAngle[np.array(deltaAngle/n, dtype=int)]) > corr2thr:
             print('¡HAY ANILLOS!')
         else:
             print('NO HAY ANILLOS')
@@ -593,7 +592,9 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
         # gaussian filter to get low resolution image
         sigma = np.float(self.main.sigmaEdit.text())
-        img = ndi.gaussian_filter(self.selected, sigma)
+        pxSize = np.float(self.main.pxSizeEdit.text())
+        sigma_px = sigma/pxSize
+        img = ndi.gaussian_filter(self.selected, sigma_px)
 
         # binarization of image
         thresh = threshold_otsu(img)
