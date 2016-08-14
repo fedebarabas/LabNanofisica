@@ -10,9 +10,6 @@ import numpy as np
 from scipy.special import erf
 from scipy.optimize import minimize
 from scipy import ndimage as ndi
-#from scipy.ndimage import label
-#from scipy.ndimage.filters import convolve, maximum_filter
-#from scipy.ndimage.measurements import maximum_position, center_of_mass
 
 import labnanofisica.sm.tools as tools
 
@@ -50,14 +47,16 @@ class Maxima():
             self.win_size = win_size
             self.kernel = kernel
             self.xkernel = xkernel
-            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
+            self.image_conv = ndi.filters.convolve(self.image.astype(float), 
+                                                   self.kernel)
         except RuntimeError:
             # If the kernel is None, I assume all the args must be calculated
             self.fwhm = tools.get_fwhm(670, 1.42) / 120
             self.win_size = int(np.ceil(self.fwhm))
             self.kernel = tools.kernel(self.fwhm)
             self.xkernel = tools.xkernel(self.fwhm)
-            self.image_conv = ndi.filters.convolve(self.image.astype(float), self.kernel)
+            self.image_conv = ndi.filters.convolve(self.image.astype(float), 
+                                                   self.kernel)
 
         # TODO: FIXME
         if self.bkg_image is None:
@@ -539,6 +538,7 @@ def ll_hess_diag0(params, *args, xy=np.arange(5), hess=np.zeros((4, 5, 5))):
     hess[2] += d2lamby*factor
 
     return np.sum(hess, (1, 2))
+
 
 def ll_hess(params, *args, xy=np.arange(5), hess=np.zeros((4, 4, 5, 5))):
     """ Full Hessian matrix of the log-likelihood function for an area of size

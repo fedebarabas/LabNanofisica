@@ -2,9 +2,9 @@
 """
 Created on Fri Jul 15 12:25:40 2016
 
-@author: Cibion
+@author: Luciano Masullo, Federico Barabas
 """
-
+import os
 from scipy import ndimage as ndi
 import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
@@ -14,111 +14,13 @@ from skimage.transform import (hough_line, hough_line_peaks,
 from skimage.filters import threshold_otsu, sobel
 import numpy as np
 from PIL import Image
-from labnanofisica.ringfinder.neurosimulations import simAxon
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 from tkinter import Tk, filedialog, simpledialog
 
-
-def getFilename(title, types, initialdir=None):
-
-    try:
-        root = Tk()
-        root.withdraw()
-        filename = filedialog.askopenfilename(title=title, filetypes=types,
-                                              initialdir=initialdir)
-        root.destroy()
-        return filename
-    except OSError:
-        print("No file selected!")
-
-
-def corr2(a, b):
-    """2D pearson coefficient of two matrixes a and b"""
-
-    # Calculating mean values
-    AM = np.mean(a)
-    BM = np.mean(b)
-
-    # Vectorized versions of c,d,e
-
-    c_vect = (a-AM)*(b-BM)
-    d_vect = (a-AM)**2
-    e_vect = (b-BM)**2
-
-    # Finally get r using those vectorized versions
-    r_out = np.sum(c_vect)/float(np.sqrt(np.sum(d_vect)*np.sum(e_vect)))
-
-    return r_out
-
-
-def dist(a, b):
-    """Euclidean distance between a and b"""
-
-    out = np.linalg.norm(a-b)
-
-    return out
-
-
-def cosTheta(a, b):
-    """Angle between two vectors a and b"""
-
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
-        return 0
-
-    cosTheta = np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
-
-    return cosTheta
-
-
-def blockshaped(arr, nrows, ncols):
-    """
-    Return an array of shape (n, nrows, ncols) where
-    n * nrows * ncols = arr.size
-
-    If arr is a 2D array, the returned array should look like n subblocks with
-    each subblock preserving the "physical" layout of arr.
-    """
-    h, w = arr.shape
-    return (arr.reshape(h//nrows, nrows, -1, ncols)
-               .swapaxes(1, 2)
-               .reshape(-1, nrows, ncols))
-
-
-def firstNmax(coord, image, N):
-    """Returns the first N max in an image from an array of coord of the max
-       in the image"""
-
-    if np.shape(coord)[0] < N:
-        return []
-    else:
-        aux = np.zeros(np.shape(coord)[0])
-        for i in np.arange(np.shape(coord)[0]):
-            aux[i] = image[coord[i, 0], coord[i, 1]]
-
-        auxmax = aux.argsort()[-N:][::-1]
-
-        coordinates3 = []
-        for i in np.arange(0, N):
-            coordinates3.append(coord[auxmax[i]])
-
-        coord3 = np.asarray(coordinates3)
-
-        return coord3
-
-
-def arrayExt(array):
-    """Extends an array in a specific way"""
-
-    y = array[::-1]
-    z = []
-    z.append(y)
-    z.append(array)
-    z.append(y)
-    z = np.array(z)
-    z = np.reshape(z, 3*np.size(array))
-
-    return z
+from labnanofisica.ringfinder.neurosimulations import simAxon
+import labnanofisica.utils as utils
+import labnanofisica.ringfinder.tools as tools
 
 
 class RingAnalizer(QtGui.QMainWindow):
@@ -164,7 +66,9 @@ class RingAnalizer(QtGui.QMainWindow):
         inputImgHist.setImageItem(self.inputImg)
         self.inputWidget.addItem(inputImgHist)
 
-        imInput = Image.open(r'C:\Users\luciano.masullo\Documents\GitHub\LabNanofisica\labnanofisica/ringfinder/test data/STED/16.06.30 Espectrina Georgina/Atto647N/tiff/STED2.tif')
+        path = os.path.join(os.getcwd(),
+                            r'labnanofisica\ringfinder\spectrin1.tif')
+        imInput = Image.open(path)
         self.inputData = np.array(imInput)
         self.inputImg.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])
@@ -262,7 +166,8 @@ class RingAnalizer(QtGui.QMainWindow):
         self.inputVb.clear()
         pxSize = np.float(self.pxSizeEdit.text())
         subimgPxSize = 1000/pxSize
-        self.filename = getFilename("Load image", [('Tiff file', '.tif')])
+        self.filename = utils.getFilename("Load image",
+                                          [('Tiff file', '.tif')])
         self.loadedImage = Image.open(self.filename)
         self.inputData = np.array(self.loadedImage)
         self.inputVb.addItem(self.inputImg)
@@ -292,26 +197,27 @@ class RingAnalizer(QtGui.QMainWindow):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
-        
+
         # initialize variables
         self.localCorr = []
         a = 0
         self.outputImg.clear()
         self.outputResult.clear()
-        
+
         # m is such that the image has m x m subimages
         m = self.subimgNum
 
         # shape the data into the subimg that we need for the analysis
-        self.blocksInput = blockshaped(self.inputData, self.inputDataSize/m,
-                                       self.inputDataSize/m)
-                                       
-        # initialize the matrix with the values of 1 and 0 (rings or not)                              
+        self.blocksInput = tools.blockshaped(self.inputData,
+                                             self.inputDataSize/m,
+                                             self.inputDataSize/m)
+
+        # initialize the matrix with the values of 1 and 0 (rings or not)
         M = np.zeros(m**2)
 #        intTot = np.sum(self.inputData)
 
         for i in np.arange(0, np.shape(self.blocksInput)[0]):
-            
+
             # for every subimg, evaluate it, with the given algorithm
             if algorithm(self.blocksInput[i, :, :]):
 
@@ -330,11 +236,11 @@ class RingAnalizer(QtGui.QMainWindow):
         self.outputResult.setImage(self.outputData)
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
-        
+
         print(self.localCorr)
         print(np.size(self.localCorr))
 #        self.setGrid(self.outputVb,n=10)
-#        
+#
 #        # plot histogram of the correlation values
 #        plt.figure(0)
 #        plt.subplot()
@@ -342,9 +248,9 @@ class RingAnalizer(QtGui.QMainWindow):
 #        plt.title("Correlations Histogram")
 #        plt.xlabel("Value")
 #        plt.ylabel("Frequency")
-#        
+#
         plt.figure()
-        data = np.array(self.localCorr).reshape(m,m)
+        data = np.array(self.localCorr).reshape(m, m)
         data = np.rot90(data)
         data = np.flipud(data)
         heatmap = plt.pcolor(data)
@@ -355,7 +261,7 @@ class RingAnalizer(QtGui.QMainWindow):
                          horizontalalignment='center',
                          verticalalignment='center',
                          )
-                         
+
         plt.colorbar(heatmap)
 
         plt.show()
@@ -363,7 +269,7 @@ class RingAnalizer(QtGui.QMainWindow):
     def FFT2(self, data):
         """FFT 2D analysis of actin rings. Looks for maxima at 180 nm in the
         frequency spectrum"""
-        
+
         # calculate new fft2
         fft2output = np.real(np.fft.fftshift(np.fft.fft2(data)))
 
@@ -377,7 +283,7 @@ class RingAnalizer(QtGui.QMainWindow):
                                threshold_rel=self.fftThr)
 
         # take first 3 max
-        coord = firstNmax(coord, fft2output, N=3)
+        coord = tools.firstNmax(coord, fft2output, N=3)
 
         # size of the subimqge of interest
         A = np.shape(data)[0]
@@ -397,8 +303,8 @@ class RingAnalizer(QtGui.QMainWindow):
         # loop for calculating all the distances d, elements of array D
 
         for i in np.arange(0, np.shape(coord)[0]):
-            d = dist([A/2, A/2], coord[i])
-            D.append(dist([A/2, A/2], coord[i]))
+            d = np.linalg.norm([A/2, A/2], coord[i])
+            D.append(np.linalg.norm([A/2, A/2], coord[i]))
             if A*(rmin/100) < d < A*(rmax/100):
                 ringBool.append(1)
 
@@ -409,12 +315,12 @@ class RingAnalizer(QtGui.QMainWindow):
 
     def points(self, data):
         """Finds local maxima in the image (points) and then if there are
-        three or more in a row considers that to be actin rings"""        
-        
+        three or more in a row considers that to be actin rings"""
+
         self.pointsThr = .3
         points = peak_local_max(data, min_distance=6,
                                 threshold_rel=self.pointsThr)
-        points = firstNmax(points, data, N=7)
+        points = tools.firstNmax(points, data, N=7)
 
         if points == []:
             return 0
@@ -428,14 +334,14 @@ class RingAnalizer(QtGui.QMainWindow):
         for i in np.arange(0, np.shape(points)[0]-1):
             # calculate the distance of every point to the others
             for j in np.arange(i+1, np.shape(points)[0]):
-                d1 = dist(points[i], points[j])
+                d1 = np.linalg.norm(points[i], points[j])
                 # if there are two points at the right distance then
                 if dmin < d1 < dmax:
                     for k in np.arange(0, np.shape(points)[0]-1):
                         # check the distance between the last point
                         # and the other points in the list
                         if k != i & k != j:
-                            d2 = dist(points[j], points[k])
+                            d2 = np.linalg.norm(points[j], points[k])
 
                         else:
                             d2 = 0
@@ -444,7 +350,7 @@ class RingAnalizer(QtGui.QMainWindow):
                         # and j-k with i, j, k points
                         v1 = points[i]-points[j]
                         v2 = points[j]-points[k]
-                        t = cosTheta(v1, v2)
+                        t = tools.cosTheta(v1, v2)
 
                         # if point k is at right distance from point j and
                         # the angle is flat enough
@@ -461,8 +367,7 @@ class RingAnalizer(QtGui.QMainWindow):
             return 0
 
     def corr2(self, data):
-        """Correlates the image with a given sinusoidal pattern"""        
-        
+        """Correlates the image with a given sinusoidal pattern"""
 
         # correlation thr set by the user
         corr2thr = np.float(self.corr2thrEdit.text())
@@ -491,7 +396,7 @@ class RingAnalizer(QtGui.QMainWindow):
             # because of later corrAngle's expansion
             deltaAngle = np.arange(meanAngle-maxAngle,
                                    meanAngle+maxAngle, n, dtype=int)
-                                   
+
             print('deltaAngle is {}'.format(deltaAngle))
 
             thetaSteps = np.arange(0, np.size((deltaAngle-179)/n), 1)
@@ -514,22 +419,22 @@ class RingAnalizer(QtGui.QMainWindow):
                     axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i],
                                         p*.025, a=0, b=sinPower).simAxon
                     # calculates correlation with data
-                    c = corr2(data, axonTheta)
+                    c = tools.corr2(data, axonTheta)
                     # saves correlation for the given phase p
                     corrPhase[p] = c
                 # saves the correlation for the best p, and given angle i
                 corrAngle[i-1] = np.max(corrPhase)
-            
-            self.localCorr.append(np.max(corrAngle))            
-            
+
+            self.localCorr.append(np.max(corrAngle))
+
             if np.max(corrAngle) > corr2thr:
                 return 1
             else:
                 return 0
 
     def getDirection(self, data):
-        """Returns the direction (angle) of the neurite in the image"""        
-        
+        """Returns the direction (angle) of the neurite in the image"""
+
         # dataSize
         dataSize = np.shape(data)[0]
 
@@ -562,7 +467,7 @@ class RingAnalizer(QtGui.QMainWindow):
 
         # allocate angleArr which will have the angles of the lines
         angleArr = []
-        
+
         # if cannot find any directions, return 666, code for this case
         if lines == []:
             return 666

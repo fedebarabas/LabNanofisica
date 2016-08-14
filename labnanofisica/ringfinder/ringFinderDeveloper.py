@@ -2,8 +2,10 @@
 """
 Created on Wed Oct  1 13:41:48 2014
 
-@authors: Luciano Masullo
+@authors: Luciano Masullo, Federico Barabas
 """
+
+import os
 
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
@@ -12,90 +14,15 @@ from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 import numpy as np
 from PIL import Image
-from labnanofisica.ringfinder.neurosimulations import simAxon
 from skimage.filters import threshold_otsu, sobel
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 from tkinter import Tk, filedialog, simpledialog
 
-
-
-def getFilename(title, types, initialdir=None):
-    try:
-        root = Tk()
-        root.withdraw()
-        filename = filedialog.askopenfilename(title=title, filetypes=types,
-                                              initialdir=initialdir)
-        root.destroy()
-        return filename
-    except OSError:
-        print("No file selected!")
-
-
-def corr2(a, b):
-
-    # Calculating mean values
-    AM = np.mean(a)
-    BM = np.mean(b)
-
-    # Vectorized versions of c,d,e
-    c_vect = (a-AM)*(b-BM)
-    d_vect = (a-AM)**2
-    e_vect = (b-BM)**2
-
-    # Finally get r using those vectorized versions
-    r_out = np.sum(c_vect)/float(np.sqrt(np.sum(d_vect)*np.sum(e_vect)))
-
-    return r_out
-
-
-def dist(a, b):
-
-    out = np.linalg.norm(a-b)
-
-    return out
-
-
-def cosTheta(a, b):
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
-        return 0
-
-    cosTheta = np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
-
-    return cosTheta
-
-
-def firstNmax(coord, image, N):
-    if np.shape(coord)[0] < N:
-        return []
-    else:
-        aux = np.zeros(np.shape(coord)[0])
-        for i in np.arange(np.shape(coord)[0]):
-            aux[i] = image[coord[i, 0], coord[i, 1]]
-
-        auxmax = aux.argsort()[-N:][::-1]
-
-        coordinates3 = []
-        for i in np.arange(0, N):
-            coordinates3.append(coord[auxmax[i]])
-
-        coord3 = np.asarray(coordinates3)
-
-        return coord3
-
-
-def arrayExt(array):
-
-    y = array[::-1]
-    z = []
-    z.append(y)
-    z.append(array)
-    z.append(y)
-    z = np.array(z)
-    z = np.reshape(z, 3*np.size(array))
-
-    return z
+import labnanofisica.utils as utils
+from labnanofisica.ringfinder.neurosimulations import simAxon
+import labnanofisica.ringfinder.tools as tools
 
 
 class RingAnalizer(QtGui.QMainWindow):
@@ -241,7 +168,9 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.addItem(self.dirPlot, row=1, col=0)
 
         # load image
-        self.im = Image.open(r'C:\Users\luciano.masullo\Documents\GitHub\LabNanofisica\labnanofisica\ringfinder\spectrin1.tif')
+        path = os.path.join(os.getcwd(),
+                            r'labnanofisica\ringfinder\spectrin1.tif')
+        self.im = Image.open(path)
         self.data = np.array(self.im)
         self.bigimg.setImage(self.data)
         self.bigimg_hist.setLevels(self.data.min(), self.data.max())
@@ -295,7 +224,8 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.vb1.clear()
         pxSize = np.float(self.main.pxSizeEdit.text())
         subimgPxSize = 1000/pxSize
-        self.filename = getFilename("Load image", [('Tiff file', '.tif')])
+        self.filename = utils.getFilename("Load image",
+                                          [('Tiff file', '.tif')])
         self.loadedImage = Image.open(self.filename)
         self.data = np.array(self.loadedImage)
         self.bigimg = pg.ImageItem()
@@ -349,7 +279,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                                threshold_rel=self.fftThr)
 
         # take first 3 max
-        coord = firstNmax(coord, fft2output, N=3)
+        coord = tools.firstNmax(coord, fft2output, N=3)
 
         # size of the subimqge of interest
         A = self.subimgSize
@@ -369,7 +299,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         # plot local maxima
         self.fft2.plot(coord[:, 0], coord[:, 1], pen=None,
                        symbolBrush=(0, 102, 204), symbolPen='w')
-                       
+
         # aux arrays: ringBool is checked to define if there are rings or not
         ringBool = []
 
@@ -379,8 +309,8 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         # loop for calculating all the distances d, elements of array D
 
         for i in np.arange(0, np.shape(coord)[0]):
-            d = dist([A/2, A/2], coord[i])
-            D.append(dist([A/2, A/2], coord[i]))
+            d = np.linalg.norm([A/2, A/2], coord[i])
+            D.append(np.linalg.norm([A/2, A/2], coord[i]))
             if A*(rmin/100) < d < A*(rmax/100):
                 ringBool.append(1)
 
@@ -406,7 +336,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                                 threshold_rel=self.pointsThr)
 
         # take first N=7 points
-        points = firstNmax(points, self.selected, N=7)
+        points = tools.firstNmax(points, self.selected, N=7)
 
         # plot points
         self.pointsPlot.addItem(self.pointsImg)
@@ -425,32 +355,34 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         for i in np.arange(0, np.shape(points)[0]-1):
             # calculate the distance of every point to the others
             for j in np.arange(i+1, np.shape(points)[0]):
-                d1 = dist(points[i], points[j])
+                d1 = np.linalg.norm(points[i], points[j])
                 # if there are two points at the right distance then
                 if dmin < d1 < dmax:
                     for k in np.arange(0, np.shape(points)[0]-1):
                         # check the distance between the last point
                         # and the other points in the list
                         if k != i and k != j:
-                            d2 = dist(points[j], points[k])
+                            d2 = np.linalg.norm(points[j], points[k])
 
                         else:
                             d2 = 0
 
-                        # calculate the angle between vector i-j and j-k with i, j, k points
+                        # calculate the angle between vector i-j and j-k with
+                        # i, j, k points
                         v1 = points[i]-points[j]
                         v2 = points[j]-points[k]
-                        t = cosTheta(v1, v2)
+                        t = tools.cosTheta(v1, v2)
 
-                        # if point k is at right distance from point j and the angle is flat enough
-                        if dmin < d2 < dmax and np.abs(t) > 0.8 :
+                        # if point k is at right distance from point j and the
+                        # angle is flat enough
+                        if dmin < d2 < dmax and np.abs(t) > 0.8:
                             # save the three points
                             D.append([points[i], points[j], points[k]])
                             # plot connections
-                            pen = pg.mkPen(color=(0, 255, 100), width=1, 
-                                           style=QtCore.Qt.SolidLine, 
+                            pen = pg.mkPen(color=(0, 255, 100), width=1,
+                                           style=QtCore.Qt.SolidLine,
                                            antialias=True)
-                            self.pointsPlot.plot([points[i][0], points[j][0], 
+                            self.pointsPlot.plot([points[i][0], points[j][0],
                                                  points[k][0]], [points[i][1],
                                                  points[j][1], points[k][1]],
                                                  pen=pen,
@@ -492,7 +424,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                 self.axonTheta = simAxon(imSize=self.subimgSize, wvlen=wvlen,
                                          theta=n*i, phase=p*.025, a=0,
                                          b=sinPower).simAxon
-                r = corr2(self.selected, self.axonTheta)
+                r = tools.corr2(self.selected, self.axonTheta)
                 corrPhase[p] = r
             corrAngle[i-1] = np.max(corrPhase)
             # corrPhaseArg saves the phase that maximizes correlation
@@ -532,7 +464,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.pCorr.showGrid(x=True, y=True)
 
         # extension to deal with angles close to 0 or 180
-        corrAngle = arrayExt(corrAngle)
+        corrAngle = tools.arrayExt(corrAngle)
         deltaAngle = np.arange(180+self.meanAngle-angleMax,
                                180+self.meanAngle+angleMax, dtype=int)
 
