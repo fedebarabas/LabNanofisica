@@ -292,74 +292,25 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.pointsPlot.clear()
 
         # set points analysis thereshold
-        self.pointsThr = np.float(self.main.pointsThrEdit.text())
+        thres = np.float(self.main.pointsThrEdit.text())
+        points, D, rings = tools.points(self.selected, thres)
 
-        # find local maxima (points)
-        points = peak_local_max(self.selected, min_distance=3,
-                                threshold_rel=self.pointsThr)
+        if rings:
+            print('¡HAY ANILLOS!')
+            pen = pg.mkPen(color=(0, 255, 100), width=1,
+                           style=QtCore.Qt.SolidLine, antialias=True)
+            for d in D:
+                self.pointsPlot.plot([d[0][0], d[1][0], d[2][0]],
+                                     [d[0][1], d[1][1], d[2][1]], pen=pen,
+                                     symbolBrush=(0, 204, 122), symbolPen='w')
+        else:
+            print('NO HAY ANILLOS')
 
-        # take first N=7 points
-        points = tools.firstNmax(points, self.selected, N=7)
-
-        # plot points
+        # plot results
         self.pointsPlot.addItem(self.pointsImg)
         self.pointsImg.setImage(self.selected)
         self.pointsPlot.plot(points[:, 0], points[:, 1], pen=None,
                              symbolBrush=(0, 204, 122), symbolPen='w')
-
-        # set minimum and maximum distance between points
-        dmin = 8
-        dmax = 12
-
-        # instance of D, vector with groups of three points
-        D = []
-
-        # look up every point
-        for i in np.arange(0, np.shape(points)[0]-1):
-            # calculate the distance of every point to the others
-            for j in np.arange(i+1, np.shape(points)[0]):
-                d1 = np.linalg.norm(points[i], points[j])
-                # if there are two points at the right distance then
-                if dmin < d1 < dmax:
-                    for k in np.arange(0, np.shape(points)[0]-1):
-                        # check the distance between the last point
-                        # and the other points in the list
-                        if k != i and k != j:
-                            d2 = np.linalg.norm(points[j], points[k])
-
-                        else:
-                            d2 = 0
-
-                        # calculate the angle between vector i-j and j-k with
-                        # i, j, k points
-                        v1 = points[i]-points[j]
-                        v2 = points[j]-points[k]
-                        t = tools.cosTheta(v1, v2)
-
-                        # if point k is at right distance from point j and the
-                        # angle is flat enough
-                        if dmin < d2 < dmax and np.abs(t) > 0.8:
-                            # save the three points
-                            D.append([points[i], points[j], points[k]])
-                            # plot connections
-                            pen = pg.mkPen(color=(0, 255, 100), width=1,
-                                           style=QtCore.Qt.SolidLine,
-                                           antialias=True)
-                            self.pointsPlot.plot([points[i][0], points[j][0],
-                                                 points[k][0]], [points[i][1],
-                                                 points[j][1], points[k][1]],
-                                                 pen=pen,
-                                                 symbolBrush=(0, 204, 122),
-                                                 symbolPen='w')
-                        else:
-                            pass
-                else:
-                    pass
-
-        if len(D) > 0:
-            print('¡HAY ANILLOS!')
-        else:
-            print('NO HAY ANILLOS')
 
     def corr2(self):
 

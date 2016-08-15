@@ -9,7 +9,6 @@ import os
 import numpy as np
 
 from scipy import ndimage as ndi
-from skimage.feature import peak_local_max
 from skimage import filters
 from skimage.transform import probabilistic_hough_line
 from skimage.filters import threshold_otsu
@@ -148,7 +147,7 @@ class RingAnalizer(QtGui.QMainWindow):
         self.loadimageButton.clicked.connect(self.loadImage)
 
         def rFpoints():
-            return self.RingFinder(self.points)
+            return self.RingFinder(tools.points)
 
         self.pointsButton.clicked.connect(rFpoints)
 
@@ -184,11 +183,11 @@ class RingAnalizer(QtGui.QMainWindow):
         xlines = []
         ylines = []
 
-        for i in np.arange(0, n-1):
+        for i in np.arange(0, n - 1):
             xlines.append(pg.InfiniteLine(pen=pen, angle=0))
             ylines.append(pg.InfiniteLine(pen=pen))
 
-        for i in np.arange(0, n-1):
+        for i in np.arange(0, n - 1):
             xlines[i].setPos((self.inputDataSize/n)*(i+1))
             ylines[i].setPos((self.inputDataSize/n)*(i+1))
             image.addItem(xlines[i])
@@ -262,59 +261,6 @@ class RingAnalizer(QtGui.QMainWindow):
         plt.colorbar(heatmap)
 
         plt.show()
-
-    def points(self, data):
-        """Finds local maxima in the image (points) and then if there are
-        three or more in a row considers that to be actin rings"""
-
-        self.pointsThr = .3
-        points = peak_local_max(data, min_distance=6,
-                                threshold_rel=self.pointsThr)
-        points = tools.firstNmax(points, data, N=7)
-
-        if points == []:
-            return 0
-
-        dmin = 8
-        dmax = 11
-
-        D = []
-
-        # look up every point
-        for i in np.arange(0, np.shape(points)[0]-1):
-            # calculate the distance of every point to the others
-            for j in np.arange(i+1, np.shape(points)[0]):
-                d1 = np.linalg.norm(points[i], points[j])
-                # if there are two points at the right distance then
-                if dmin < d1 < dmax:
-                    for k in np.arange(0, np.shape(points)[0]-1):
-                        # check the distance between the last point
-                        # and the other points in the list
-                        if k != i & k != j:
-                            d2 = np.linalg.norm(points[j], points[k])
-
-                        else:
-                            d2 = 0
-
-                        # calculate the angle between vector i-j
-                        # and j-k with i, j, k points
-                        v1 = points[i]-points[j]
-                        v2 = points[j]-points[k]
-                        t = tools.cosTheta(v1, v2)
-
-                        # if point k is at right distance from point j and
-                        # the angle is flat enough
-                        if dmin < d2 < dmax and np.abs(t) > 0.9:
-                            # save the three points and plot the connections
-                            D.append([points[i], points[j], points[k]])
-
-                        else:
-                            pass
-
-        if len(D) > 0:
-            return 1
-        else:
-            return 0
 
     def corr2(self, data):
         """Correlates the image with a given sinusoidal pattern"""
