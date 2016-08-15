@@ -6,19 +6,17 @@ Created on Wed Oct  1 13:41:48 2014
 """
 
 import os
+import numpy as np
 
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
 from skimage import filters
-from skimage.transform import (hough_line, hough_line_peaks,
-                               probabilistic_hough_line)
-import numpy as np
-from PIL import Image
-from skimage.filters import threshold_otsu, sobel
+from skimage.transform import probabilistic_hough_line
+from skimage.filters import threshold_otsu
 
+from PIL import Image
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-from tkinter import Tk, filedialog, simpledialog
 
 import labnanofisica.utils as utils
 from labnanofisica.ringfinder.neurosimulations import simAxon
@@ -257,36 +255,22 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
         print('FFT 2D analysis executed')
 
-        # remove previous fft2
-        self.fft2.clear()
+        thres = np.float(self.main.fftThrEdit.text())
+        fft2output, coord, rlim, rings = tools.FFT2(self.selected, thres)
+        rmin, rmax = rlim
 
-        # calculate new fft2
-        fft2output = np.real(np.fft.fftshift(np.fft.fft2(self.selected)))
+        if rings:
+            print('¡HAY ANILLOS!')
+        else:
+            print('NO HAY ANILLOS')
 
-        # take abs value and log10 for better visualization
-        fft2output = np.abs(np.log10(fft2output))
-
-        # add new fft2 graph
+        # plot results
+        self.fft2.clear()       # remove previous fft2
         self.fft2.addItem(self.FFT2img)
         self.fft2.setAspectLocked(True)
         self.FFT2img.setImage(fft2output)
 
-        # set fft2 analysis threshold
-        self.fftThr = np.float(self.main.fftThrEdit.text())
-
-        # calculate local intensity maxima
-        coord = peak_local_max(fft2output, min_distance=2,
-                               threshold_rel=self.fftThr)
-
-        # take first 3 max
-        coord = tools.firstNmax(coord, fft2output, N=3)
-
-        # size of the subimqge of interest
-        A = self.subimgSize
-
-        # max and min radius in pixels, 9 -> 220 nm, 12 -> 167 nm
-        rmin = 9
-        rmax = 12
+        A = self.subimgSize    # size of the subimqge of interest
 
         # draw circles for visulization
         rminX = A*(rmax/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2
@@ -299,27 +283,6 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         # plot local maxima
         self.fft2.plot(coord[:, 0], coord[:, 1], pen=None,
                        symbolBrush=(0, 102, 204), symbolPen='w')
-
-        # aux arrays: ringBool is checked to define if there are rings or not
-        ringBool = []
-
-        # D saves the distances of local maxima from the centre of the fft2
-        D = []
-
-        # loop for calculating all the distances d, elements of array D
-
-        for i in np.arange(0, np.shape(coord)[0]):
-            d = np.linalg.norm([A/2, A/2], coord[i])
-            D.append(np.linalg.norm([A/2, A/2], coord[i]))
-            if A*(rmin/100) < d < A*(rmax/100):
-                ringBool.append(1)
-
-        # condition for ringBool: all elements d must correspond to
-        # periods between 170 and 220 nm
-        if np.sum(ringBool) == np.shape(coord)[0]-1 and np.sum(ringBool) > 0:
-            print('¡HAY ANILLOS!')
-        else:
-            print('NO HAY ANILLOS')
 
     def points(self):
 

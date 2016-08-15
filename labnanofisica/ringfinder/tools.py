@@ -6,6 +6,7 @@ Created on Sun Aug 14 14:53:28 2016
 """
 
 import numpy as np
+from skimage.feature import peak_local_max
 
 
 def corr2(a, b):
@@ -86,3 +87,47 @@ def arrayExt(array):
     z = np.reshape(z, 3*np.size(array))
 
     return z
+
+
+def FFT2(self, data, fftThr=0.4):
+    """FFT 2D analysis of actin rings. Looks for maxima at 180 nm in the
+    frequency spectrum"""
+
+    # calculate new fft2
+    fft2output = np.real(np.fft.fftshift(np.fft.fft2(data)))
+
+    # take abs value and log10 for better visualization
+    fft2output = np.abs(np.log10(fft2output))
+
+    # calculate local intensity maxima
+    coord = peak_local_max(fft2output, min_distance=2, threshold_rel=fftThr)
+
+    # take first 3 max
+    coord = firstNmax(coord, fft2output, N=3)
+
+    # size of the subimqge of interest
+    A = np.shape(data)[0]
+
+    # max and min radius in pixels, 9 -> 220 nm, 12 -> 167 nm
+    rmin, rmax = (9, 12)
+
+    # auxarrays: ringBool, D
+
+    # ringBool is checked to define wether there are rings or not
+    ringBool = []
+
+    # D saves the distances of local maxima from the centre of the fft2
+    D = []
+
+    # loop for calculating all the distances d, elements of array D
+    for i in np.arange(0, np.shape(coord)[0]):
+        d = np.linalg.norm([A/2, A/2], coord[i])
+        D.append(d)
+        if A*(rmin/100) < d < A*(rmax/100):
+            ringBool.append(1)
+
+    # condition for ringBool: all elements d must correspond to
+    # periods between 170 and 220 nm
+    rings = np.sum(ringBool) == np.shape(coord)[0]-1 and np.sum(ringBool) > 0
+
+    return fft2output, coord, (rmin, rmax), rings

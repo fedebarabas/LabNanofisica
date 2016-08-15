@@ -4,19 +4,20 @@ Created on Fri Jul 15 12:25:40 2016
 
 @author: Luciano Masullo, Federico Barabas
 """
+
 import os
+import numpy as np
+
 from scipy import ndimage as ndi
-import matplotlib.pyplot as plt
 from skimage.feature import peak_local_max
 from skimage import filters
-from skimage.transform import (hough_line, hough_line_peaks,
-                               probabilistic_hough_line)
-from skimage.filters import threshold_otsu, sobel
-import numpy as np
+from skimage.transform import probabilistic_hough_line
+from skimage.filters import threshold_otsu
+
 from PIL import Image
+import matplotlib.pyplot as plt
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
-from tkinter import Tk, filedialog, simpledialog
 
 from labnanofisica.ringfinder.neurosimulations import simAxon
 import labnanofisica.utils as utils
@@ -152,7 +153,7 @@ class RingAnalizer(QtGui.QMainWindow):
         self.pointsButton.clicked.connect(rFpoints)
 
         def rFfft2():
-            return self.RingFinder(self.FFT2)
+            return self.RingFinder(tools.FFT2)
 
         self.FFT2Button.clicked.connect(rFfft2)
 
@@ -214,15 +215,11 @@ class RingAnalizer(QtGui.QMainWindow):
 
         # initialize the matrix with the values of 1 and 0 (rings or not)
         M = np.zeros(m**2)
-#        intTot = np.sum(self.inputData)
 
         for i in np.arange(0, np.shape(self.blocksInput)[0]):
 
             # for every subimg, evaluate it, with the given algorithm
-            if algorithm(self.blocksInput[i, :, :]):
-
-#            if np.sum(self.blocksInput[i, :, :]) > (intTot/m**2) and algorithm(self.blocksInput[i, :, :]):
-#            if np.sum(self.blocksInput[i, :, :]) > intTot/m**2:
+            if algorithm(self.blocksInput[i, :, :])[-1]:
                 M[i] = 1
                 a = a+1
             else:
@@ -265,53 +262,6 @@ class RingAnalizer(QtGui.QMainWindow):
         plt.colorbar(heatmap)
 
         plt.show()
-
-    def FFT2(self, data):
-        """FFT 2D analysis of actin rings. Looks for maxima at 180 nm in the
-        frequency spectrum"""
-
-        # calculate new fft2
-        fft2output = np.real(np.fft.fftshift(np.fft.fft2(data)))
-
-        # take abs value and log10 for better visualization
-        fft2output = np.abs(np.log10(fft2output))
-
-        self.fftThr = 0.4
-
-        # calculate local intensity maxima
-        coord = peak_local_max(fft2output, min_distance=2,
-                               threshold_rel=self.fftThr)
-
-        # take first 3 max
-        coord = tools.firstNmax(coord, fft2output, N=3)
-
-        # size of the subimqge of interest
-        A = np.shape(data)[0]
-
-        # max and min radius in pixels, 9 -> 220 nm, 12 -> 167 nm
-        rmin = 9
-        rmax = 12
-
-        # auxarrays: ringBool, D
-
-        # ringBool is checked to define wether there are rings or not
-        ringBool = []
-
-        # D saves the distances of local maxima from the centre of the fft2
-        D = []
-
-        # loop for calculating all the distances d, elements of array D
-
-        for i in np.arange(0, np.shape(coord)[0]):
-            d = np.linalg.norm([A/2, A/2], coord[i])
-            D.append(np.linalg.norm([A/2, A/2], coord[i]))
-            if A*(rmin/100) < d < A*(rmax/100):
-                ringBool.append(1)
-
-        if np.sum(ringBool) == np.shape(coord)[0]-1 and np.sum(ringBool) > 0:
-            return 1
-        else:
-            return 0
 
     def points(self, data):
         """Finds local maxima in the image (points) and then if there are
