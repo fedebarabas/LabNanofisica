@@ -55,6 +55,7 @@ class sin2D:
 
 
 class simAxon(sin2D):
+
     def __init__(self, imSize=50, wvlen=10, theta=15, phase=.25, a=0, b=2,
                  *args, **kwargs):
 
@@ -78,5 +79,5 @@ class simAxon(sin2D):
             self.mask = sin2D(self.imSize, 2*self.imSize, -self.theta + 90,
                               phase).sin2d**a
 
-        # make simulated axon
-        self.simAxon = self.grating2*(self.mask)
+        # Make simulated axon data
+        self.data = self.grating2*(self.mask)

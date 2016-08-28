@@ -1,0 +1,12 @@
+*.raw
+*.txt
+*.inf
+*~
+*.dax
+*.tif
+*.tiff
+*.pyc
+*.hdf5
+*.png
+*.npy
+*.dat

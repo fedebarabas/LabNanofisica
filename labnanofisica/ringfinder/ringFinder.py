@@ -9,21 +9,19 @@ import os
 import numpy as np
 
 from scipy import ndimage as ndi
-from skimage import filters
+import skimage.filter as filters
 from skimage.transform import probabilistic_hough_line
-from skimage.filters import threshold_otsu
 
 from PIL import Image
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 
-from labnanofisica.ringfinder.neurosimulations import simAxon
 import labnanofisica.utils as utils
 import labnanofisica.ringfinder.tools as tools
 
 
-class RingAnalizer(QtGui.QMainWindow):
+class Gollum(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
 
@@ -40,18 +38,15 @@ class RingAnalizer(QtGui.QMainWindow):
         self.setCentralWidget(self.cwidget)
 
         # Main Widgets' layout
-
         self.mainLayout = QtGui.QGridLayout()
         self.cwidget.setLayout(self.mainLayout)
 
         # input, output and buttons widgets
-
         self.inputWidget = pg.GraphicsLayoutWidget()
         self.outputWidget = pg.GraphicsLayoutWidget()
         self.buttonWidget = QtGui.QWidget()
 
         # layout of the three widgets
-
         self.mainLayout.addWidget(self.inputWidget, 0, 0, 2, 1)
         self.mainLayout.addWidget(self.outputWidget, 0, 1, 2, 1)
         self.mainLayout.addWidget(self.buttonWidget, 0, 2, 1, 1)
@@ -66,8 +61,8 @@ class RingAnalizer(QtGui.QMainWindow):
         inputImgHist.setImageItem(self.inputImg)
         self.inputWidget.addItem(inputImgHist)
 
-        path = os.path.join(os.getcwd(),
-                            r'labnanofisica\ringfinder\spectrin1.tif')
+        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
+                            'spectrin1.tif')
         imInput = Image.open(path)
         self.inputData = np.array(imInput)
         self.inputImg.setImage(self.inputData)
@@ -147,17 +142,17 @@ class RingAnalizer(QtGui.QMainWindow):
         self.loadimageButton.clicked.connect(self.loadImage)
 
         def rFpoints():
-            return self.RingFinder(tools.points)
+            return self.ringFinder(tools.pointsMethod)
 
         self.pointsButton.clicked.connect(rFpoints)
 
         def rFfft2():
-            return self.RingFinder(tools.FFT2)
+            return self.ringFinder(tools.FFTMethod)
 
         self.FFT2Button.clicked.connect(rFfft2)
 
         def rFcorr():
-            return self.RingFinder(self.corr2)
+            return self.ringFinder(self.corrMethodGUI)
 
         self.corrButton.clicked.connect(rFcorr)
 
@@ -193,14 +188,12 @@ class RingAnalizer(QtGui.QMainWindow):
             image.addItem(xlines[i])
             image.addItem(ylines[i])
 
-    def RingFinder(self, algorithm):
+    def ringFinder(self, algorithm):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
 
         # initialize variables
-        self.localCorr = []
-        a = 0
         self.outputImg.clear()
         self.outputResult.clear()
 
@@ -212,17 +205,29 @@ class RingAnalizer(QtGui.QMainWindow):
                                              self.inputDataSize/m,
                                              self.inputDataSize/m)
 
-        # initialize the matrix with the values of 1 and 0 (rings or not)
-        M = np.zeros(m**2)
+        # initialize the matrix for storing the ring detection in each subimg
+        M = np.zeros(m**2, type=bool)
+        nBlocks = np.shape(self.blocksInput)[0]
+        self.localCorr = np.zeros(nBlocks)
+        for i in np.arange(nBlocks):
 
-        for i in np.arange(0, np.shape(self.blocksInput)[0]):
+            # for every subimg, we apply the correlation method for
+            # ring finding
+            args = [np.float(self.corr2thrEdit.text()),
+                    np.float(self.sigmaEdit.text()),
+                    np.float(self.pxSizeEdit.text()),
+                    np.float(self.lineLengthEdit.text()),
+                    np.float(self.thetaStepEdit.text()),
+                    np.float(self.deltaAngleEdit.text()),
+                    np.float(self.wvlenEdit.text()),
+                    np.float(self.sinPowerEdit.text())]
+            output = tools.corrMethod(self.blocksInput[i, :, :], *args)
+            angle, corrTheta, corrMax, theta, phase, rings = output
+            print('algo', rings)
 
-            # for every subimg, evaluate it, with the given algorithm
-            if algorithm(self.blocksInput[i, :, :])[-1]:
-                M[i] = 1
-                a = a+1
-            else:
-                M[i] = 0
+            # Store results
+            self.localCorr[i] = corrMax
+            M[i] = rings
 
         # code for visualization of the output
         M1 = M.reshape(m, m)
@@ -262,143 +267,11 @@ class RingAnalizer(QtGui.QMainWindow):
 
         plt.show()
 
-    def corr2(self, data):
-        """Correlates the image with a given sinusoidal pattern"""
-
-        # correlation thr set by the user
-        corr2thr = np.float(self.corr2thrEdit.text())
-
-        # mean angle calculated
-        meanAngle = self.getDirection(data)
-        print('meanAngle is {}'.format(np.around(meanAngle, 1)))
-
-        if meanAngle == 2:
-            dataRot = np.rot90(data)
-            meanAngle = self.getDirection(dataRot)-90
-
-        if meanAngle == 666:
-            self.localCorr.append(0)
-            return 0
-        else:
-            subImgSize = np.shape(data)[0]
-
-            # angular step size set by the user
-            n = np.float(self.thetaStepEdit.text())
-
-            # get the max allowed angle from the user
-            maxAngle = np.float(self.deltaAngleEdit.text())
-
-            # set the angle range to look for a correlation, 179 is added
-            # because of later corrAngle's expansion
-            deltaAngle = np.arange(meanAngle-maxAngle,
-                                   meanAngle+maxAngle, n, dtype=int)
-
-            print('deltaAngle is {}'.format(deltaAngle))
-
-            thetaSteps = np.arange(0, np.size((deltaAngle-179)/n), 1)
-            # phase steps are set to 20, TO DO: explore this parameter
-            phaseSteps = np.arange(0, 21, 1)
-
-            corrPhase = np.zeros(np.size(phaseSteps))
-            corrAngle = np.zeros(np.size(thetaSteps))
-
-            wvlen_nm = np.float(self.wvlenEdit.text())  # wvlen in nm
-            pxSize = np.float(self.pxSizeEdit.text())  # pixel size in nm
-            wvlen = wvlen_nm/pxSize  # wvlen in px
-            sinPower = np.float(self.sinPowerEdit.text())
-
-            # for now we correlate with the full sin2D pattern
-
-            for i in thetaSteps:
-                for p in phaseSteps:
-                    # creates simulated axon
-                    axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i],
-                                        p*.025, a=0, b=sinPower).simAxon
-                    # calculates correlation with data
-                    c = tools.corr2(data, axonTheta)
-                    # saves correlation for the given phase p
-                    corrPhase[p] = c
-                # saves the correlation for the best p, and given angle i
-                corrAngle[i-1] = np.max(corrPhase)
-
-            self.localCorr.append(np.max(corrAngle))
-
-            if np.max(corrAngle) > corr2thr:
-                return 1
-            else:
-                return 0
-
-    def getDirection(self, data):
-        """Returns the direction (angle) of the neurite in the image"""
-
-        # dataSize
-        dataSize = np.shape(data)[0]
-
-        # gaussian filter to get low resolution image
-        sigma = np.float(self.sigmaEdit.text())
-        pxSize = np.float(self.pxSizeEdit.text())
-        sigma_px = sigma/pxSize
-        img = ndi.gaussian_filter(data, sigma_px)
-
-        # TO DO: good cond on intensity
-        if np.sum(img) < 10:
-            return 666
-        else:
-            pass
-
-        # binarization of image
-        thresh = threshold_otsu(img)
-        binary = img > thresh
-
-        # find edges
-        edges = filters.sobel(binary)
-
-        # min line length is set by the user
-        linLen = np.float(self.lineLengthEdit.text())
-
-        # get directions
-        lines = probabilistic_hough_line(edges, threshold=10,
-                                         line_length=dataSize*linLen,
-                                         line_gap=3)
-
-        # allocate angleArr which will have the angles of the lines
-        angleArr = []
-
-        # if cannot find any directions, return 666, code for this case
-        if lines == []:
-            return 666
-
-        else:
-            for line in lines:
-                p0, p1 = line
-
-                # get the m coefficient of the lines and the angle
-                if p1[1] == p0[1]:
-                    angle = 90
-                else:
-                    m = (p1[0]-p0[0])/(p1[1]-p0[1])
-                    angle = (180/np.pi)*np.arctan(m)
-
-                angleArr.append(angle)
-
-            # calculate mean angle and its standard deviation
-            print('angleArr is {}'.format(np.around(angleArr, 1)))
-            meanAngle = np.mean(angleArr)
-            stdAngle = np.std(angleArr)
-
-            # if the std is too high it's probably the case of flat angles,
-            # i.e., 181, -2, 0.3, -1, 179, getDirection returns 2, a code
-            # for this case.
-            # TO DO: find optimal threshold, 40 is arbitrary
-            if stdAngle > 40:
-                return 2
-            else:
-                return meanAngle
 
 if __name__ == '__main__':
 
     app = QtGui.QApplication([])
 
-    win = RingAnalizer()
+    win = Gollum()
     win.show()
     app.exec_()

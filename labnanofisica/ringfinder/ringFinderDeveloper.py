@@ -9,10 +9,8 @@ import os
 import numpy as np
 
 from scipy import ndimage as ndi
-from skimage.feature import peak_local_max
-from skimage import filters
+import skimage.filter as filters
 from skimage.transform import probabilistic_hough_line
-from skimage.filters import threshold_otsu
 
 from PIL import Image
 import pyqtgraph as pg
@@ -23,7 +21,7 @@ from labnanofisica.ringfinder.neurosimulations import simAxon
 import labnanofisica.ringfinder.tools as tools
 
 
-class RingAnalizer(QtGui.QMainWindow):
+class GollumDeveloper(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
 
@@ -38,9 +36,9 @@ class RingAnalizer(QtGui.QMainWindow):
 
         self.FFT2Button = QtGui.QPushButton('FFT 2D')
         self.corrButton = QtGui.QPushButton('Correlation')
-        self.corr2thrEdit = QtGui.QLineEdit('0.1')
+        self.corrThresEdit = QtGui.QLineEdit('0.1')
         self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.deltaAngleEdit = QtGui.QLineEdit('30')
+        self.deltaThEdit = QtGui.QLineEdit('30')
         self.sinPowerEdit = QtGui.QLineEdit('2')
         self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
@@ -58,9 +56,9 @@ class RingAnalizer(QtGui.QMainWindow):
         self.wvlenEdit = QtGui.QLineEdit('180')
 
         self.roiLabel = QtGui.QLabel('ROI size (px)')
-        self.corr2thrLabel = QtGui.QLabel('Correlation threshold')
+        self.corrThresLabel = QtGui.QLabel('Correlation threshold')
         self.thetaStepLabel = QtGui.QLabel('Angular step (°)')
-        self.deltaAngleLabel = QtGui.QLabel('Delta Angle (°)')
+        self.deltaThLabel = QtGui.QLabel('Delta Angle (°)')
         self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter (nm)')
         self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
         self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
@@ -83,16 +81,16 @@ class RingAnalizer(QtGui.QMainWindow):
         self.layout.addWidget(self.roiSizeEdit, 2, 12, 1, 1)
 
         self.layout.addWidget(self.corrButton, 3, 11, 1, 2)
-        self.layout.addWidget(self.corr2thrLabel, 4, 11, 1, 1)
-        self.layout.addWidget(self.corr2thrEdit, 4, 12, 1, 1)
+        self.layout.addWidget(self.corrThresLabel, 4, 11, 1, 1)
+        self.layout.addWidget(self.corrThresEdit, 4, 12, 1, 1)
         self.layout.addWidget(self.wvlenLabel, 5, 11, 1, 1)
         self.layout.addWidget(self.wvlenEdit, 5, 12, 1, 1)
         self.layout.addWidget(self.sinPowerLabel, 6, 11, 1, 1)
         self.layout.addWidget(self.sinPowerEdit, 6, 12, 1, 1)
         self.layout.addWidget(self.thetaStepLabel, 7, 11, 1, 1)
         self.layout.addWidget(self.thetaStepEdit, 7, 12, 1, 1)
-        self.layout.addWidget(self.deltaAngleLabel, 8, 11, 1, 1)
-        self.layout.addWidget(self.deltaAngleEdit, 8, 12, 1, 1)
+        self.layout.addWidget(self.deltaThLabel, 8, 11, 1, 1)
+        self.layout.addWidget(self.deltaThEdit, 8, 12, 1, 1)
 
 #        self.layout.addWidget(self.FFT2Button, 6, 11, 1, 2)
 #        self.layout.addWidget(self.fftThrEdit, 7, 11, 1, 1)
@@ -115,9 +113,9 @@ class RingAnalizer(QtGui.QMainWindow):
 
         self.roiSizeEdit.textChanged.connect(self.imagegui.updateROI)
         self.loadimageButton.clicked.connect(self.imagegui.loadImage)
-        self.FFT2Button.clicked.connect(self.imagegui.FFT2)
-        self.corrButton.clicked.connect(self.imagegui.corr2)
-        self.pointsButton.clicked.connect(self.imagegui.points)
+#        self.FFT2Button.clicked.connect(self.imagegui.FFT2)
+#        self.corrButton.clicked.connect(self.imagegui.corr2)
+#        self.pointsButton.clicked.connect(self.imagegui.points)
         self.filterImageButton.clicked.connect(self.imagegui.imageFilter)
         self.dirButton.clicked.connect(self.imagegui.getDirection)
         self.intThrButton.clicked.connect(self.imagegui.intThreshold)
@@ -166,8 +164,8 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.addItem(self.dirPlot, row=1, col=0)
 
         # load image
-        path = os.path.join(os.getcwd(),
-                            r'labnanofisica\ringfinder\spectrin1.tif')
+        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
+                            'spectrin1.tif')
         self.im = Image.open(path)
         self.data = np.array(self.im)
         self.bigimg.setImage(self.data)
@@ -251,12 +249,12 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.roiSizeY = np.float(self.main.roiSizeEdit.text())
         self.roi.setSize(self.roiSizeX, self.roiSizeY)
 
-    def FFT2(self):
+    def FFTMethodGUI(self):
 
         print('FFT 2D analysis executed')
 
         thres = np.float(self.main.fftThrEdit.text())
-        fft2output, coord, rlim, rings = tools.FFT2(self.selected, thres)
+        fft2output, coord, rlim, rings = tools.FFTMethod(self.selected, thres)
         rmin, rmax = rlim
 
         if rings:
@@ -284,7 +282,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.fft2.plot(coord[:, 0], coord[:, 1], pen=None,
                        symbolBrush=(0, 102, 204), symbolPen='w')
 
-    def points(self):
+    def pointsMethodGUI(self):
 
         print('Points analysis executed')
 
@@ -293,7 +291,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
         # set points analysis thereshold
         thres = np.float(self.main.pointsThrEdit.text())
-        points, D, rings = tools.points(self.selected, thres)
+        points, D, rings = tools.pointsMethod(self.selected, thres)
 
         if rings:
             print('¡HAY ANILLOS!')
@@ -312,78 +310,57 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.pointsPlot.plot(points[:, 0], points[:, 1], pen=None,
                              symbolBrush=(0, 204, 122), symbolPen='w')
 
-    def corr2(self):
+    def corrMethodGUI(self):
 
-        corr2thr = np.float(self.main.corr2thrEdit.text())
         self.pCorr.clear()
 
-        n = np.float(self.main.thetaStepEdit.text())
-        theta = np.arange(0, 180, n)
-
-        thetaSteps = np.arange(0, (180/n), 1)
-        phaseSteps = np.arange(0, 21, 1)
-
-        corrPhase = np.zeros(np.size(phaseSteps))
-        corrAngle = np.zeros(np.size(thetaSteps))
-        corrPhaseArg = np.zeros(np.size(thetaSteps))
-
-        wvlen_nm = np.float(self.main.wvlenEdit.text())  # wvlen in nm
-        pxSize = np.float(self.main.pxSizeEdit.text())
-        wvlen = wvlen_nm/pxSize  # wvlen in px
-        sinPower = np.float(self.main.sinPowerEdit.text())
-
-        # now we correlate with the full sin2D pattern
-        for i in thetaSteps:
-            for p in phaseSteps:
-                self.axonTheta = simAxon(imSize=self.subimgSize, wvlen=wvlen,
-                                         theta=n*i, phase=p*.025, a=0,
-                                         b=sinPower).simAxon
-                r = tools.corr2(self.selected, self.axonTheta)
-                corrPhase[p] = r
-            corrAngle[i-1] = np.max(corrPhase)
-            # corrPhaseArg saves the phase that maximizes correlation
-            corrPhaseArg[i-1] = .025*np.argmax(corrPhase)
-
-        # plot best correlation with the image
-        thetaMax = theta[np.argmax(corrAngle)]
-        phaseMax = corrPhaseArg[np.argmax(corrAngle)]
+        # for every subimg, we apply the correlation method for
+        # ring finding
+        corrThres = np.float(self.corrThresEdit.text())
+        thStep = np.float(self.thetaStepEdit.text())
+        deltaTh = np.float(self.deltaThEdit.text())
+        wvlen = np.float(self.wvlenEdit.text())
+        sinPow = np.float(self.sinPowerEdit.text())
+        args = [corrThres, np.float(self.sigmaEdit.text()),
+                np.float(self.pxSizeEdit.text()),
+                np.float(self.lineLengthEdit.text()),
+                thStep, deltaTh, wvlen, sinPow]
+        output = tools.corrMethod(self.selected, *args)
+        th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
         self.bestAxon = simAxon(imSize=self.subimgSize, wvlen=wvlen,
-                                theta=thetaMax, phase=phaseMax,
-                                a=0, b=sinPower).simAxon
+                                theta=thetaMax, phase=phaseMax, b=sinPow).data
 
         self.img1.setImage(self.bestAxon)
         self.img2.setImage(self.selected)
 
+        # plot the threshold of correlation chosen by the user
+        # phase steps are set to 20, TO DO: explore this parameter
+        theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep, dtype=int)
         pen1 = pg.mkPen(color=(0, 255, 100), width=2,
                         style=QtCore.Qt.SolidLine, antialias=True)
         pen2 = pg.mkPen(color=(255, 50, 60), width=1,
                         style=QtCore.Qt.SolidLine, antialias=True)
-
-        # plot the threshold of correlation chosen by the user
-        self.pCorr.plot(theta, corrAngle, pen=pen1)
-        self.pCorr.plot(theta, corr2thr*np.ones(np.size(theta)), pen=pen2)
+        self.pCorr.plot(theta, corrTheta, pen=pen1)
+        self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)), pen=pen2)
         self.pCorr.showGrid(x=False, y=False)
 
-        # plot the area given by the direction (meanAngle) and the deltaAngle
+        # plot the area given by the direction (meanAngle) and the deltaTh
         if self.meanAngle is not None:
-            angleMax = np.float(self.main.deltaAngleEdit.text())
-            deltaAngle = np.arange(self.meanAngle-angleMax,
-                                   self.meanAngle+angleMax, dtype=int)
-            self.pCorr.plot(deltaAngle, 0.3*np.ones(np.size(deltaAngle)),
+            thetaArea = np.arange(self.meanAngle - deltaTh,
+                                  self.meanAngle + deltaTh, dtype=int)
+            self.pCorr.plot(thetaArea, 0.3*np.ones(np.size(deltaTh)),
                             fillLevel=0, brush=(50, 50, 200, 100))
-        else:
-            pass
-
         self.pCorr.showGrid(x=True, y=True)
 
-        # extension to deal with angles close to 0 or 180
-        corrAngle = tools.arrayExt(corrAngle)
-        deltaAngle = np.arange(180+self.meanAngle-angleMax,
-                               180+self.meanAngle+angleMax, dtype=int)
+#        # extension to deal with angles close to 0 or 180
+#        corrTheta = tools.arrayExt(corrTheta)
+#        deltaTh = np.arange(180 + self.meanAnglele - deltaTh,
+#                            180 + self.meanAngle + deltaTh, dtype=int)
 
-        # decide wether there are rings or not
-        if np.max(corrAngle[np.array(deltaAngle/n, dtype=int)]) > corr2thr:
+        # decide whether there are rings or not
+#        if np.max(corrTheta[np.array(deltaTh/n, dtype=int)]) > corrThres:
+        if rings:
             print('¡HAY ANILLOS!')
         else:
             print('NO HAY ANILLOS')
@@ -402,7 +379,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         sigma = np.float(self.main.sigmaEdit.text())
         img = ndi.gaussian_filter(self.data, sigma)
 
-        thresh = threshold_otsu(img)
+        thresh = filters.threshold_otsu(img)
         binary = img > thresh
 
         self.data = self.data*binary
@@ -417,7 +394,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         img = ndi.gaussian_filter(self.selected, sigma_px)
 
         # binarization of image
-        thresh = threshold_otsu(img)
+        thresh = filters.threshold_otsu(img)
         binary = img > thresh
 
         # find edges
@@ -491,6 +468,6 @@ if __name__ == '__main__':
 
     app = QtGui.QApplication([])
 
-    win = RingAnalizer()
+    win = GollumDeveloper()
     win.show()
     app.exec_()
