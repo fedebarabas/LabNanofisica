@@ -8,14 +8,10 @@ Created on Fri Jul 15 12:25:40 2016
 import os
 import numpy as np
 
-from scipy import ndimage as ndi
-import skimage.filter as filters
-from skimage.transform import probabilistic_hough_line
-
 from PIL import Image
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
+from pyqtgraph.Qt import QtGui
 
 import labnanofisica.utils as utils
 import labnanofisica.ringfinder.tools as tools
@@ -24,7 +20,6 @@ import labnanofisica.ringfinder.tools as tools
 class Gollum(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         self.i = 0
@@ -51,21 +46,22 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout.addWidget(self.outputWidget, 0, 1, 2, 1)
         self.mainLayout.addWidget(self.buttonWidget, 0, 2, 1, 1)
 
-        self.inputImg = pg.ImageItem()
+        self.inputImgItem = pg.ImageItem()
         self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
         self.inputVb.setAspectLocked(True)
-        self.inputVb.addItem(self.inputImg)
+        self.inputVb.addItem(self.inputImgItem)
 
         inputImgHist = pg.HistogramLUTItem()
         inputImgHist.gradient.loadPreset('thermal')
-        inputImgHist.setImageItem(self.inputImg)
+        inputImgHist.setImageItem(self.inputImgItem)
+        inputImgHist.vb.setLimits(yMin=0, yMax=20000)
         self.inputWidget.addItem(inputImgHist)
 
         path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
                             'spectrin1.tif')
         imInput = Image.open(path)
         self.inputData = np.array(imInput)
-        self.inputImg.setImage(self.inputData)
+        self.inputImgItem.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])
 
         self.outputImg = pg.ImageItem()
@@ -76,119 +72,93 @@ class Gollum(QtGui.QMainWindow):
         outputImgHist = pg.HistogramLUTItem()
         outputImgHist.gradient.loadPreset('thermal')
         outputImgHist.setImageItem(self.outputImg)
+        outputImgHist.vb.setLimits(yMin=0, yMax=20000)
         self.outputWidget.addItem(outputImgHist)
-
-#        imOutput = Image.open('spectrin1.tif')
-#        self.outputData = np.array(imOutput)
-#        self.outputImg.setImage(np.rot90(self.outputData))
 
         self.outputResult = pg.ImageItem()
         self.outputVb.addItem(self.outputResult)
 
-        self.buttonsLayout = QtGui.QGridLayout()
-        self.buttonWidget.setLayout(self.buttonsLayout)
+        buttonsLayout = QtGui.QGridLayout()
+        self.buttonWidget.setLayout(buttonsLayout)
 
-        self.setGrid(self.inputVb, n=10)
+        tools.setGrid(self.inputVb, self.inputData)
 
         self.FFT2Button = QtGui.QPushButton('FFT 2D')
         self.corrButton = QtGui.QPushButton('Correlation')
         self.deltaAngleEdit = QtGui.QLineEdit('30')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.pointsButton = QtGui.QPushButton('Points')
-        self.loadimageButton = QtGui.QPushButton('Load Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
 #        self.subimgNumEdit = QtGui.QLineEdit('10')
         self.sigmaEdit = QtGui.QLineEdit('60')
         self.lineLengthEdit = QtGui.QLineEdit('0.2')
-        self.pxSizeEdit = QtGui.QLineEdit('20')
         self.corr2thrEdit = QtGui.QLineEdit('0.1')
         self.sinPowerEdit = QtGui.QLineEdit('2')
         self.wvlenEdit = QtGui.QLineEdit('180')
 
-        self.corr2thrLabel = QtGui.QLabel('Correlation threshold')
-        self.thetaStepLabel = QtGui.QLabel('Angular step (°)')
-        self.deltaAngleLabel = QtGui.QLabel('Delta Angle (°)')
-        self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
-        self.pxSizeLabel = QtGui.QLabel('Pixel Size (nm)')
-        self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
-        self.lineLengthLabel = QtGui.QLabel('Direction lines length')
-        self.getDirParam = QtGui.QLabel('Get direction parameters')
-#        self.buttonsLayout.addWidget(self.FFT2Button, 0, 0, 1, 2)
-#        self.buttonsLayout.addWidget(self.pointsButton, 1, 0, 1, 2)
-        self.buttonsLayout.addWidget(self.corrButton, 0, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.corr2thrLabel, 1, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.corr2thrEdit, 1, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.thetaStepLabel, 2, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.thetaStepEdit, 2, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.deltaAngleLabel, 3, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.deltaAngleEdit, 3, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.sinPowerLabel, 4, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.sinPowerEdit, 4, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.wvlenLabel, 5, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.wvlenEdit, 5, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.getDirParam, 6, 0, 1, 2)
-        self.buttonsLayout.addWidget(self.sigmaLabel, 7, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.sigmaEdit, 7, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.lineLengthLabel, 8, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.lineLengthEdit, 8, 1, 1, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('STORM pixel (nm)'), 0, 0)
+        self.STORMPxEdit = QtGui.QLineEdit('133')
+        buttonsLayout.addWidget(self.STORMPxEdit, 0, 1)
+        self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
+        buttonsLayout.addWidget(self.loadSTORMButton, 0, 2)
 
-        self.buttonsLayout.addWidget(self.loadimageButton, 9, 0, 1, 1)
-#        self.buttonsLayout.addWidget(self.subimgNumEdit, 7, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pxSizeLabel, 10, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pxSizeEdit, 10, 1, 1, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('STED pixel (nm)'), 1, 0)
+        self.STEDPxEdit = QtGui.QLineEdit('20')
+        buttonsLayout.addWidget(self.STEDPxEdit, 1, 1)
+        self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
+        buttonsLayout.addWidget(self.loadSTEDButton, 1, 2)
 
-        self.loadimageButton.clicked.connect(self.loadImage)
+        buttonsLayout.addWidget(self.corrButton, 2, 0, 1, 2)
+        buttonsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 3, 0)
+        buttonsLayout.addWidget(self.corr2thrEdit, 3, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Angular step (°)'), 4, 0)
+        buttonsLayout.addWidget(self.thetaStepEdit, 4, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Delta Angle (°)'), 5, 0)
+        buttonsLayout.addWidget(self.deltaAngleEdit, 5, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Sinusoidal pattern power'), 6, 0)
+        buttonsLayout.addWidget(self.sinPowerEdit, 6, 1)
+        wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
+        buttonsLayout.addWidget(wvlenLabel, 7, 0)
+        buttonsLayout.addWidget(self.wvlenEdit, 7, 1)
+        dirParLabel = QtGui.QLabel('Get direction parameters')
+        buttonsLayout.addWidget(dirParLabel, 8, 0, 1, 2)
+        buttonsLayout.addWidget(QtGui.QLabel('Sigma of gaussian filter'), 9, 0)
+        buttonsLayout.addWidget(self.sigmaEdit, 9, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Direction lines length'), 10, 0)
+        buttonsLayout.addWidget(self.lineLengthEdit, 10, 1)
 
-        def rFpoints():
-            return self.ringFinder(tools.pointsMethod)
+        self.loadSTORMButton.clicked.connect(self.loadSTORM)
+        self.loadSTEDButton.clicked.connect(self.loadSTED)
 
-        self.pointsButton.clicked.connect(rFpoints)
+        self.corrButton.clicked.connect(self.ringFinder)
 
-        def rFfft2():
-            return self.ringFinder(tools.FFTMethod)
+    def loadSTED(self):
+        self.loadImage(np.float(self.STEDPxEdit.text()))
 
-        self.FFT2Button.clicked.connect(rFfft2)
+    def loadSTORM(self):
+        self.loadImage(np.float(self.STORMPxEdit.text()))
 
-        def rFcorr():
-            return self.ringFinder(self.corrMethodGUI)
-
-        self.corrButton.clicked.connect(rFcorr)
-
-    def loadImage(self):
+    def loadImage(self, pxSize, crop=0):
 
         self.inputVb.clear()
-        pxSize = np.float(self.pxSizeEdit.text())
         subimgPxSize = 1000/pxSize
         self.filename = utils.getFilename("Load image",
                                           [('Tiff file', '.tif')])
         self.loadedImage = Image.open(self.filename)
         self.inputData = np.array(self.loadedImage)
-        self.inputVb.addItem(self.inputImg)
-        self.inputImg.setImage(self.inputData)
+        self.inputVb.addItem(self.inputImgItem)
+        self.inputImgItem.setImage(self.inputData)
         self.inputDataSize = np.size(self.inputData[0])
         n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
-        self.setGrid(self.inputVb, n)
+        tools.setGrid(self.inputVb, self.inputData, n)
 
-    def setGrid(self, image, n):
+        self.inputVb.setLimits(xMin=-0.5, xMax=2*self.inputData.shape[0] - 0.5,
+                               minXRange=4, yMin=-0.5,
+                               yMax=2*self.inputData.shape[1] - 0.5,
+                               minYRange=4)
 
-        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
-
-        xlines = []
-        ylines = []
-
-        for i in np.arange(0, n - 1):
-            xlines.append(pg.InfiniteLine(pen=pen, angle=0))
-            ylines.append(pg.InfiniteLine(pen=pen))
-
-        for i in np.arange(0, n - 1):
-            xlines[i].setPos((self.inputDataSize/n)*(i+1))
-            ylines[i].setPos((self.inputDataSize/n)*(i+1))
-            image.addItem(xlines[i])
-            image.addItem(ylines[i])
-
-    def ringFinder(self, algorithm):
+    def ringFinder(self):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
@@ -206,7 +176,7 @@ class Gollum(QtGui.QMainWindow):
                                              self.inputDataSize/m)
 
         # initialize the matrix for storing the ring detection in each subimg
-        M = np.zeros(m**2, type=bool)
+        M = np.zeros(m**2, dtype=bool)
         nBlocks = np.shape(self.blocksInput)[0]
         self.localCorr = np.zeros(nBlocks)
         for i in np.arange(nBlocks):
@@ -223,7 +193,6 @@ class Gollum(QtGui.QMainWindow):
                     np.float(self.sinPowerEdit.text())]
             output = tools.corrMethod(self.blocksInput[i, :, :], *args)
             angle, corrTheta, corrMax, theta, phase, rings = output
-            print('algo', rings)
 
             # Store results
             self.localCorr[i] = corrMax
@@ -238,8 +207,6 @@ class Gollum(QtGui.QMainWindow):
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
 
-        print(self.localCorr)
-        print(np.size(self.localCorr))
 #        self.setGrid(self.outputVb,n=10)
 #
 #        # plot histogram of the correlation values
@@ -260,8 +227,7 @@ class Gollum(QtGui.QMainWindow):
             for x in range(data.shape[1]):
                 plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
                          horizontalalignment='center',
-                         verticalalignment='center',
-                         )
+                         verticalalignment='center',)
 
         plt.colorbar(heatmap)
 

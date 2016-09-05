@@ -11,6 +11,8 @@ from skimage.feature import peak_local_max
 import skimage.filter as filters
 from skimage.transform import probabilistic_hough_line
 
+from pyqtgraph.Qt import QtCore, QtGui
+
 from labnanofisica.ringfinder.neurosimulations import simAxon
 
 
@@ -168,7 +170,7 @@ def linesFromBinary(binaryData, minLen):
 
 
 def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
-               sinPow):
+               sinPow, developer=False):
     """Searches for rings by correlating the image data with a given
     sinusoidal pattern
 
@@ -192,17 +194,19 @@ def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
 
     # line angle calculated
     th0 = getDirection(data, sigma, pxSize, minLen)
-    print('line angle is {}'.format(np.around(th0, 1)))
 
     if th0 is None:
-        return 0, False
+        return th0, 0, 0, 0, 0, False
     else:
+        print('line angle is {}'.format(np.around(th0, 1)))
         subImgSize = np.shape(data)[0]
 
         # set the angle range to look for a correlation, 179 is added
         # because of later corrAngle's expansion
-        theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep, dtype=int)
-        print('theta is {}'.format(theta))
+        if developer:
+            theta = np.arange(0, 180, thStep)
+        else:
+            theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
 
         # phase steps are set to 20, TO DO: explore this parameter
         phase = np.arange(0, 21, 1)
@@ -217,8 +221,8 @@ def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
         for t in np.arange(len(theta)):
             for p in phase:
                 # creates simulated axon
-                axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025,
-                                    a=0, b=sinPow).simAxon
+                axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
+                                    b=sinPow).data
 
                 # saves correlation for the given phase p
                 corrPhase[p] = pearson(data, axonTheta)
@@ -333,3 +337,23 @@ def pointsMethod(self, data, thres=.3):
         rings = len(D) > 0
 
     return points, D, rings
+
+
+def setGrid(viewbox, image, n=10):
+
+    shape = image.shape
+
+    pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
+    rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
+    rect.setPen(pen)
+    viewbox.addItem(rect)
+
+    for i in np.arange(0, n - 1):
+        cx = (shape[0]/n)*(i + 1)
+        cy = (shape[1]/n)*(i + 1)
+        linex = QtGui.QGraphicsLineItem(0, cx, shape[0], cx)
+        liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
+        linex.setPen(pen)
+        liney.setPen(pen)
+        viewbox.addItem(linex)
+        viewbox.addItem(liney)

@@ -172,7 +172,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.bigimg_hist.setLevels(self.data.min(), self.data.max())
 
         # grid, n = number of divisions in each side
-        self.setGrid(np.int(np.shape(self.data)[0]/50))
+        self.setGrid(self.vb1, self.data, np.int(np.shape(self.data)[0]/50))
 
 #        # FFT2
 #        self.FFT2img = pg.ImageItem()
@@ -336,7 +336,7 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
         # plot the threshold of correlation chosen by the user
         # phase steps are set to 20, TO DO: explore this parameter
-        theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep, dtype=int)
+        theta = np.arange(0, 180, thStep)
         pen1 = pg.mkPen(color=(0, 255, 100), width=2,
                         style=QtCore.Qt.SolidLine, antialias=True)
         pen2 = pg.mkPen(color=(255, 50, 60), width=1,
@@ -353,13 +353,6 @@ class ImageGUI(pg.GraphicsLayoutWidget):
                             fillLevel=0, brush=(50, 50, 200, 100))
         self.pCorr.showGrid(x=True, y=True)
 
-#        # extension to deal with angles close to 0 or 180
-#        corrTheta = tools.arrayExt(corrTheta)
-#        deltaTh = np.arange(180 + self.meanAnglele - deltaTh,
-#                            180 + self.meanAngle + deltaTh, dtype=int)
-
-        # decide whether there are rings or not
-#        if np.max(corrTheta[np.array(deltaTh/n, dtype=int)]) > corrThres:
         if rings:
             print('¡HAY ANILLOS!')
         else:
@@ -433,23 +426,6 @@ class ImageGUI(pg.GraphicsLayoutWidget):
 
         print('Angle is {} +/- {}'.format(self.meanAngle, self.stdAngle))
 
-    def setGrid(self, n):
-
-        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
-
-        self.xlines = []
-        self.ylines = []
-
-        for i in np.arange(0, n-1):
-            self.xlines.append(pg.InfiniteLine(pen=pen, angle=0))
-            self.ylines.append(pg.InfiniteLine(pen=pen))
-
-        for i in np.arange(0, n-1):
-            self.xlines[i].setPos((np.shape(self.data)[0]/n)*(i+1))
-            self.ylines[i].setPos((np.shape(self.data)[0]/n)*(i+1))
-            self.vb1.addItem(self.xlines[i])
-            self.vb1.addItem(self.ylines[i])
-
     def stormCrop(self):
 
         self.data = self.data[59:-59, 59:-59]
@@ -462,7 +438,8 @@ class ImageGUI(pg.GraphicsLayoutWidget):
         self.vb1.addItem(self.roi)
         pxSize = np.float(self.main.pxSizeEdit.text())
         subimgPxSize = 1000/pxSize
-        self.setGrid(np.int(np.shape(self.data)[0]/subimgPxSize))
+        tools.setGrid(self.vb1, self.data,
+                      np.int(np.shape(self.data)[0]/subimgPxSize))
 
 if __name__ == '__main__':
 
