@@ -62,7 +62,6 @@ class Gollum(QtGui.QMainWindow):
         imInput = Image.open(path)
         self.inputData = np.array(imInput)
         self.inputImgItem.setImage(self.inputData)
-        self.inputDataSize = np.size(self.inputData[0])
 
         self.outputImg = pg.ImageItem()
         self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
@@ -98,35 +97,49 @@ class Gollum(QtGui.QMainWindow):
         self.wvlenEdit = QtGui.QLineEdit('180')
 
         buttonsLayout.addWidget(QtGui.QLabel('STORM pixel (nm)'), 0, 0)
-        self.STORMPxEdit = QtGui.QLineEdit('133')
+        self.STORMPxEdit = QtGui.QLineEdit('6.65')
         buttonsLayout.addWidget(self.STORMPxEdit, 0, 1)
+        excludedLabel = QtGui.QLabel('#Excluded px from localization')
+        buttonsLayout.addWidget(excludedLabel, 1, 0)
+        self.excludedEdit = QtGui.QLineEdit('3')
+        buttonsLayout.addWidget(self.excludedEdit, 1, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
+        self.magnificationEdit = QtGui.QLineEdit('20')
+        buttonsLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
-        buttonsLayout.addWidget(self.loadSTORMButton, 0, 2)
+        self.loadSTORMButton.setSizePolicy(QtGui.QSizePolicy.Preferred,
+                                           QtGui.QSizePolicy.Expanding)
+        buttonsLayout.addWidget(self.loadSTORMButton, 0, 2, 3, 1)
 
-        buttonsLayout.addWidget(QtGui.QLabel('STED pixel (nm)'), 1, 0)
+        buttonsLayout.addWidget(QtGui.QLabel('STED pixel (nm)'), 3, 0)
         self.STEDPxEdit = QtGui.QLineEdit('20')
-        buttonsLayout.addWidget(self.STEDPxEdit, 1, 1)
+        buttonsLayout.addWidget(self.STEDPxEdit, 3, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
-        buttonsLayout.addWidget(self.loadSTEDButton, 1, 2)
+        self.loadSTEDButton.setSizePolicy(QtGui.QSizePolicy.Preferred,
+                                          QtGui.QSizePolicy.Expanding)
+        buttonsLayout.addWidget(self.loadSTEDButton, 3, 2)
 
-        buttonsLayout.addWidget(self.corrButton, 2, 0, 1, 2)
-        buttonsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 3, 0)
-        buttonsLayout.addWidget(self.corr2thrEdit, 3, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Angular step (°)'), 4, 0)
-        buttonsLayout.addWidget(self.thetaStepEdit, 4, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Delta Angle (°)'), 5, 0)
-        buttonsLayout.addWidget(self.deltaAngleEdit, 5, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Sinusoidal pattern power'), 6, 0)
-        buttonsLayout.addWidget(self.sinPowerEdit, 6, 1)
+        buttonsLayout.addWidget(self.corrButton, 4, 0, 1, 2)
+        buttonsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 5, 0)
+        buttonsLayout.addWidget(self.corr2thrEdit, 5, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Angular step (°)'), 6, 0)
+        buttonsLayout.addWidget(self.thetaStepEdit, 6, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Delta Angle (°)'), 7, 0)
+        buttonsLayout.addWidget(self.deltaAngleEdit, 7, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Sinusoidal pattern power'), 8, 0)
+        buttonsLayout.addWidget(self.sinPowerEdit, 8, 1)
         wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
-        buttonsLayout.addWidget(wvlenLabel, 7, 0)
-        buttonsLayout.addWidget(self.wvlenEdit, 7, 1)
+        buttonsLayout.addWidget(wvlenLabel, 9, 0)
+        buttonsLayout.addWidget(self.wvlenEdit, 9, 1)
         dirParLabel = QtGui.QLabel('Get direction parameters')
-        buttonsLayout.addWidget(dirParLabel, 8, 0, 1, 2)
-        buttonsLayout.addWidget(QtGui.QLabel('Sigma of gaussian filter'), 9, 0)
-        buttonsLayout.addWidget(self.sigmaEdit, 9, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Direction lines length'), 10, 0)
-        buttonsLayout.addWidget(self.lineLengthEdit, 10, 1)
+        buttonsLayout.addWidget(dirParLabel, 10, 0, 1, 2)
+        gaussianSigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
+        buttonsLayout.addWidget(gaussianSigmaLabel, 11, 0)
+        buttonsLayout.addWidget(self.sigmaEdit, 11, 1)
+        buttonsLayout.addWidget(QtGui.QLabel('Direction lines length'), 12, 0)
+        buttonsLayout.addWidget(self.lineLengthEdit, 12, 1)
+
+        buttonsLayout.setColumnMinimumWidth(1, 50)
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
@@ -137,20 +150,26 @@ class Gollum(QtGui.QMainWindow):
         self.loadImage(np.float(self.STEDPxEdit.text()))
 
     def loadSTORM(self):
-        self.loadImage(np.float(self.STORMPxEdit.text()))
+        # The STORM image has black borders because it's not possible to
+        # localize molecules near the edge of the widefield image.
+        # Therefore we need to crop those borders before running the analysis.
+        nExcluded = np.float(self.excludedEdit.text())
+        mag = np.float(self.magnificationEdit.text())
+        self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag)
 
     def loadImage(self, pxSize, crop=0):
 
-        self.inputVb.clear()
+        # We need 1um sized subimages
         subimgPxSize = 1000/pxSize
         self.filename = utils.getFilename("Load image",
                                           [('Tiff file', '.tif')])
-        self.loadedImage = Image.open(self.filename)
-        self.inputData = np.array(self.loadedImage)
-        self.inputVb.addItem(self.inputImgItem)
+        self.inputData = np.array(Image.open(self.filename))
+        shape = self.inputData.shape
+        self.inputData = self.inputData[crop:shape[0] - crop,
+                                        crop:shape[1] - crop]
         self.inputImgItem.setImage(self.inputData)
-        self.inputDataSize = np.size(self.inputData[0])
         n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
+
         tools.setGrid(self.inputVb, self.inputData, n)
 
         self.inputVb.setLimits(xMin=-0.5, xMax=2*self.inputData.shape[0] - 0.5,
@@ -172,17 +191,16 @@ class Gollum(QtGui.QMainWindow):
 
         # shape the data into the subimg that we need for the analysis
         self.blocksInput = tools.blockshaped(self.inputData,
-                                             self.inputDataSize/m,
-                                             self.inputDataSize/m)
+                                             self.inputData.shape[0]/m,
+                                             self.inputData.shape[0]/m)
 
         # initialize the matrix for storing the ring detection in each subimg
         M = np.zeros(m**2, dtype=bool)
         nBlocks = np.shape(self.blocksInput)[0]
         self.localCorr = np.zeros(nBlocks)
-        for i in np.arange(nBlocks):
 
-            # for every subimg, we apply the correlation method for
-            # ring finding
+        # for every subimg, we apply the correlation method for ring finding
+        for i in np.arange(nBlocks):
             args = [np.float(self.corr2thrEdit.text()),
                     np.float(self.sigmaEdit.text()),
                     np.float(self.pxSizeEdit.text()),
@@ -200,8 +218,8 @@ class Gollum(QtGui.QMainWindow):
 
         # code for visualization of the output
         M1 = M.reshape(m, m)
-        self.outputData = np.kron(M1, np.ones((self.inputDataSize/m,
-                                               self.inputDataSize/m)))
+        self.outputData = np.kron(M1, np.ones((self.inputData.shape[0]/m,
+                                               self.inputData.shape[0]/m)))
         self.outputImg.setImage(self.inputData)
         self.outputResult.setImage(self.outputData)
         self.outputResult.setZValue(10)  # make sure this image is on top

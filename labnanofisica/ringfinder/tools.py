@@ -357,3 +357,27 @@ def setGrid(viewbox, image, n=10):
         liney.setPen(pen)
         viewbox.addItem(linex)
         viewbox.addItem(liney)
+
+
+class Grid:
+
+    def __init__(self, viewbox, image, n=10):
+
+        shape = image.shape
+
+        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
+        rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
+        rect.setPen(pen)
+        viewbox.addItem(rect)
+
+        for i in np.arange(0, n - 1):
+            cx = (shape[0]/n)*(i + 1)
+            cy = (shape[1]/n)*(i + 1)
+            linex = QtGui.QGraphicsLineItem(0, cx, shape[0], cx)
+            liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
+            linex.setPen(pen)
+            liney.setPen(pen)
+            viewbox.addItem(linex)
+            viewbox.addItem(liney)
+
+    def update()
