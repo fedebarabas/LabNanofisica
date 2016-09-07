@@ -8,7 +8,7 @@ Created on Sun Aug 14 14:53:28 2016
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
-import skimage.filter as filters
+import skimage.filters as filters
 from skimage.transform import probabilistic_hough_line
 
 from pyqtgraph.Qt import QtCore, QtGui
@@ -19,17 +19,17 @@ from labnanofisica.ringfinder.neurosimulations import simAxon
 def pearson(a, b):
     """2D pearson coefficient of two matrixes a and b"""
 
-    # Calculating mean values
-    AM = np.mean(a)
-    BM = np.mean(b)
+    # Subtracting mean values
+    an = a - np.mean(a)
+    bn = b - np.mean(b)
 
-    # Vectorized versions of c,d,e
-    c_vect = (a-AM)*(b-BM)
-    d_vect = (a-AM)**2
-    e_vect = (b-BM)**2
+    # Vectorized versions of c, d, e
+    c_vect = an*bn
+    d_vect = an*an
+    e_vect = bn*bn
 
     # Finally get r using those vectorized versions
-    r_out = np.sum(c_vect)/float(np.sqrt(np.sum(d_vect)*np.sum(e_vect)))
+    r_out = np.sum(c_vect)/np.sqrt(np.sum(d_vect)*np.sum(e_vect))
 
     return r_out
 
@@ -100,7 +100,7 @@ def getDirection(data, sigma, pxSize, minLen):
 
     sigma: gaussian filter sigma to blur the image, in nm
     pxSize: size of px in nm
-    minLen: minimum  line length."""
+    minLen: minimum  line length in nm."""
 
     # gaussian filter to get low resolution image
     sigma_px = sigma/pxSize
@@ -115,6 +115,7 @@ def getDirection(data, sigma, pxSize, minLen):
         thresh = filters.threshold_otsu(img)
         binary = img > thresh
 
+        minLen /= pxSize    # minLen in pxs
         meanAngle, stdAngle = linesFromBinary(binary, minLen)
 
         if meanAngle is not None:
@@ -140,9 +141,8 @@ def linesFromBinary(binaryData, minLen):
     edges = filters.sobel(binaryData)
 
     # get directions
-    shape = np.shape(binaryData)[0]
-    lines = probabilistic_hough_line(edges, threshold=10,
-                                     line_length=shape*minLen, line_gap=3)
+    lines = probabilistic_hough_line(edges, threshold=10, line_length=minLen,
+                                     line_gap=3)
 
     # allocate angleArr which will have the angles of the lines
     angleArr = []
@@ -178,7 +178,7 @@ def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
     thres: discrimination threshold for the correlated data.
     sigma: gaussian filter sigma to blur the image, in nm
     pxSize: size of px in nm
-    minLen: minimum line length.
+    minLen: minimum line length in nm.
     thStep: angular step size
     deltaTh: maximum pattern rotation angle for correlation matching
     wvlen: wavelength of the ring pattern, in nm
@@ -362,37 +362,32 @@ def setGrid(viewbox, image, n=10):
 class Grid:
 
     def __init__(self, viewbox, image, n=10):
-
         self.vb = viewbox
         self.n = n
+        self.lines = []
+        self.draw(image)
 
+    def draw(self, image):
         shape = image.shape
-        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
+        pen = QtGui.QPen(QtCore.Qt.yellow, shape[0]//250, QtCore.Qt.SolidLine)
         self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
         self.rect.setPen(pen)
         self.vb.addItem(self.rect)
-        self.xLines = []
-        self.yLines = []
+        self.lines.append(self.rect)
 
-        for i in np.arange(0, n - 1):
-            cx = (shape[0]/n)*(i + 1)
-            cy = (shape[1]/n)*(i + 1)
+        for i in np.arange(0, self.n - 1):
+            cx = (shape[0]/self.n)*(i + 1)
+            cy = (shape[1]/self.n)*(i + 1)
             linex = QtGui.QGraphicsLineItem(0, cx, shape[0], cx)
             liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
             linex.setPen(pen)
             liney.setPen(pen)
             self.vb.addItem(linex)
             self.vb.addItem(liney)
-            self.xLines.append(linex)
-            self.yLines.append(liney)
+            self.lines.append(linex)
+            self.lines.append(liney)
 
-    def update(self, image):
-
-        shape = image.shape
-        self.rect.setRect(0, 0, shape[0], shape[1])
-
-        for i in np.arange(0, self.n - 1):
-            cx = (shape[0]/self.n)*(i + 1)
-            cy = (shape[1]/self.n)*(i + 1)
-            self.xLines[i].setLine(0, cx, shape[0], cx)
-            self.yLines[i].setLine(cy, 0, cy, shape[1])
+#    def clear(self):
+#
+#        for line in self.lines:
+#            self.vb.removeItem(line)

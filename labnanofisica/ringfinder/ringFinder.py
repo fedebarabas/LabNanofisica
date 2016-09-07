@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui
+from pyqtgraph.Qt import QtGui, QtCore
 
 import labnanofisica.utils as utils
 import labnanofisica.ringfinder.tools as tools
@@ -42,9 +42,11 @@ class Gollum(QtGui.QMainWindow):
         self.buttonWidget = QtGui.QWidget()
 
         # layout of the three widgets
-        self.mainLayout.addWidget(self.inputWidget, 0, 1, 2, 1)
-        self.mainLayout.addWidget(self.outputWidget, 0, 2, 2, 1)
-        self.mainLayout.addWidget(self.buttonWidget, 0, 0, 1, 1)
+        self.mainLayout.addWidget(self.inputWidget, 0, 1)
+        self.mainLayout.addWidget(self.outputWidget, 0, 2)
+        self.mainLayout.addWidget(self.buttonWidget, 0, 0)
+        self.mainLayout.setColumnMinimumWidth(1, 600)
+        self.mainLayout.setColumnMinimumWidth(2, 600)
 
         self.inputImgItem = pg.ImageItem()
         self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
@@ -56,13 +58,6 @@ class Gollum(QtGui.QMainWindow):
         inputImgHist.setImageItem(self.inputImgItem)
         inputImgHist.vb.setLimits(yMin=0, yMax=20000)
         self.inputWidget.addItem(inputImgHist)
-
-        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
-                            'spectrin1.tif')
-        imInput = Image.open(path)
-        self.inputData = np.array(imInput)
-        self.inputImgItem.setImage(self.inputData)
-        self.grid = tools.Grid(self.inputVb, self.inputData)
 
         self.outputImg = pg.ImageItem()
         self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
@@ -78,77 +73,97 @@ class Gollum(QtGui.QMainWindow):
         self.outputResult = pg.ImageItem()
         self.outputVb.addItem(self.outputResult)
 
-        buttonsLayout = QtGui.QGridLayout()
-        self.buttonWidget.setLayout(buttonsLayout)
+        # Separate frame for loading controls
+        loadFrame = QtGui.QFrame(self)
+        loadFrame.setFrameStyle(QtGui.QFrame.Panel)
+        loadLayout = QtGui.QGridLayout()
+        loadFrame.setLayout(loadLayout)
+        loadTitle = QtGui.QLabel('<strong>Load image</strong>')
+        loadTitle.setTextFormat(QtCore.Qt.RichText)
+        loadLayout.addWidget(loadTitle, 0, 0)
+        loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
+        self.STORMPxEdit = QtGui.QLineEdit('6.65')
+        loadLayout.addWidget(self.STORMPxEdit, 1, 1)
+        excludedLabel = QtGui.QLabel('#Excluded px from localization')
+        loadLayout.addWidget(excludedLabel, 2, 0)
+        self.excludedEdit = QtGui.QLineEdit('3')
+        loadLayout.addWidget(self.excludedEdit, 2, 1)
+        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 3, 0)
+        self.magnificationEdit = QtGui.QLineEdit('20')
+        loadLayout.addWidget(self.magnificationEdit, 3, 1)
+        self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
+        loadLayout.addWidget(self.loadSTORMButton, 4, 0, 1, 2)
+        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 5, 0)
+        self.STEDPxEdit = QtGui.QLineEdit('20')
+        loadLayout.addWidget(self.STEDPxEdit, 5, 1)
+        self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
+        loadLayout.addWidget(self.loadSTEDButton, 6, 0, 1, 2)
+        loadFrame.setFixedHeight(200)
 
-        tools.setGrid(self.inputVb, self.inputData)
-
-        self.FFT2Button = QtGui.QPushButton('FFT 2D')
+        # Ring finding method settings frame
         self.corrButton = QtGui.QPushButton('Correlation')
         self.deltaAngleEdit = QtGui.QLineEdit('30')
         self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.pointsButton = QtGui.QPushButton('Points')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
-        self.pointsThrEdit = QtGui.QLineEdit('0.6')
-#        self.subimgNumEdit = QtGui.QLineEdit('10')
+        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
         self.sigmaEdit = QtGui.QLineEdit('60')
-        self.lineLengthEdit = QtGui.QLineEdit('0.2')
+        minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
+        self.lineLengthEdit = QtGui.QLineEdit('300')
         self.corr2thrEdit = QtGui.QLineEdit('0.1')
+        powLabel = QtGui.QLabel('Sinusoidal pattern power')
         self.sinPowerEdit = QtGui.QLineEdit('2')
+        wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
+        settingsFrame = QtGui.QFrame(self)
+        settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
+        settingsLayout = QtGui.QGridLayout()
+        settingsFrame.setLayout(settingsLayout)
+        settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
+        settingsTitle.setTextFormat(QtCore.Qt.RichText)
+        settingsLayout.addWidget(settingsTitle, 0, 0)
+        settingsLayout.addWidget(gaussianSigmaLabel, 1, 0)
+        settingsLayout.addWidget(self.sigmaEdit, 1, 1)
+        settingsLayout.addWidget(minLenLabel, 2, 0)
+        settingsLayout.addWidget(self.lineLengthEdit, 2, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 3, 0)
+        settingsLayout.addWidget(self.corr2thrEdit, 3, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 4, 0)
+        settingsLayout.addWidget(self.thetaStepEdit, 4, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 5, 0)
+        settingsLayout.addWidget(self.deltaAngleEdit, 5, 1)
+        settingsLayout.addWidget(powLabel, 6, 0)
+        settingsLayout.addWidget(self.sinPowerEdit, 6, 1)
+        settingsLayout.addWidget(wvlenLabel, 7, 0)
+        settingsLayout.addWidget(self.wvlenEdit, 7, 1)
+        settingsLayout.addWidget(self.corrButton, 8, 0, 1, 2)
+        settingsFrame.setFixedHeight(260)
 
-        buttonsLayout.addWidget(QtGui.QLabel('STORM pixel (nm)'), 0, 0)
-        self.STORMPxEdit = QtGui.QLineEdit('6.65')
-        buttonsLayout.addWidget(self.STORMPxEdit, 0, 1)
-        excludedLabel = QtGui.QLabel('#Excluded px from localization')
-        buttonsLayout.addWidget(excludedLabel, 1, 0)
-        self.excludedEdit = QtGui.QLineEdit('3')
-        buttonsLayout.addWidget(self.excludedEdit, 1, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
-        self.magnificationEdit = QtGui.QLineEdit('20')
-        buttonsLayout.addWidget(self.magnificationEdit, 2, 1)
-        self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
-        self.loadSTORMButton.setSizePolicy(QtGui.QSizePolicy.Preferred,
-                                           QtGui.QSizePolicy.Expanding)
-        buttonsLayout.addWidget(self.loadSTORMButton, 0, 2, 3, 1)
-
-        buttonsLayout.addWidget(QtGui.QLabel('STED pixel (nm)'), 3, 0)
-        self.STEDPxEdit = QtGui.QLineEdit('20')
-        buttonsLayout.addWidget(self.STEDPxEdit, 3, 1)
-        self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
-        self.loadSTEDButton.setSizePolicy(QtGui.QSizePolicy.Preferred,
-                                          QtGui.QSizePolicy.Expanding)
-        buttonsLayout.addWidget(self.loadSTEDButton, 3, 2)
-
-        buttonsLayout.addWidget(self.corrButton, 4, 0, 1, 2)
-        buttonsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 5, 0)
-        buttonsLayout.addWidget(self.corr2thrEdit, 5, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Angular step (°)'), 6, 0)
-        buttonsLayout.addWidget(self.thetaStepEdit, 6, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Delta Angle (°)'), 7, 0)
-        buttonsLayout.addWidget(self.deltaAngleEdit, 7, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Sinusoidal pattern power'), 8, 0)
-        buttonsLayout.addWidget(self.sinPowerEdit, 8, 1)
-        wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
-        buttonsLayout.addWidget(wvlenLabel, 9, 0)
-        buttonsLayout.addWidget(self.wvlenEdit, 9, 1)
-        dirParLabel = QtGui.QLabel('Get direction parameters')
-        buttonsLayout.addWidget(dirParLabel, 10, 0, 1, 2)
-        gaussianSigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
-        buttonsLayout.addWidget(gaussianSigmaLabel, 11, 0)
-        buttonsLayout.addWidget(self.sigmaEdit, 11, 1)
-        buttonsLayout.addWidget(QtGui.QLabel('Direction lines length'), 12, 0)
-        buttonsLayout.addWidget(self.lineLengthEdit, 12, 1)
-
-        buttonsLayout.setColumnMinimumWidth(1, 50)
+        buttonsLayout = QtGui.QGridLayout()
+        self.buttonWidget.setLayout(buttonsLayout)
+        buttonsLayout.addWidget(loadFrame, 0, 0)
+        buttonsLayout.addWidget(settingsFrame, 1, 0)
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
 
         self.corrButton.clicked.connect(self.ringFinder)
 
+        # Load sample STED image
+        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
+                            'spectrin1.tif')
+        imInput = Image.open(path)
+        self.inputData = np.array(imInput)
+        self.inputImgItem.setImage(self.inputData)
+        self.pxSize = np.float(self.STEDPxEdit.text())
+        self.grid = tools.Grid(self.inputVb, self.inputData)
+        self.inputVb.setLimits(xMin=-0.05*self.inputData.shape[0],
+                               xMax=1.05*self.inputData.shape[0], minXRange=4,
+                               yMin=-0.05*self.inputData.shape[1],
+                               yMax=1.05*self.inputData.shape[1], minYRange=4)
+
     def loadSTED(self):
         self.loadImage(np.float(self.STEDPxEdit.text()))
+        self.pxSize = np.float(self.STEDMPxEdit.text())
 
     def loadSTORM(self):
         # The STORM image has black borders because it's not possible to
@@ -157,8 +172,11 @@ class Gollum(QtGui.QMainWindow):
         nExcluded = np.float(self.excludedEdit.text())
         mag = np.float(self.magnificationEdit.text())
         self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag)
+        self.pxSize = np.float(self.STORMPxEdit.text())
 
-    def loadImage(self, pxSize, crop=0):
+    def loadImage(self, pxSize, crop=0, name=None):
+
+        self.inputVb.clear()
 
         # We need 1um sized subimages
 #        subimgPxSize = 1000/pxSize
@@ -168,15 +186,16 @@ class Gollum(QtGui.QMainWindow):
         shape = self.inputData.shape
         self.inputData = self.inputData[crop:shape[0] - crop,
                                         crop:shape[1] - crop]
+        self.inputVb.addItem(self.inputImgItem)
         self.inputImgItem.setImage(self.inputData)
 #        n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
 
-        self.grid.update(self.inputData)
+        self.grid.draw(self.inputData)
 
-        self.inputVb.setLimits(xMin=-0.5, xMax=2*self.inputData.shape[0] - 0.5,
-                               minXRange=4, yMin=-0.5,
-                               yMax=2*self.inputData.shape[1] - 0.5,
-                               minYRange=4)
+        self.inputVb.setLimits(xMin=-0.05*self.inputData.shape[0],
+                               xMax=1.05*self.inputData.shape[0], minXRange=4,
+                               yMin=-0.05*self.inputData.shape[1],
+                               yMax=1.05*self.inputData.shape[1], minYRange=4)
 
     def ringFinder(self):
         """RingFinder handles the input data, and then evaluates every subimg
@@ -204,7 +223,7 @@ class Gollum(QtGui.QMainWindow):
         for i in np.arange(nBlocks):
             args = [np.float(self.corr2thrEdit.text()),
                     np.float(self.sigmaEdit.text()),
-                    np.float(self.pxSizeEdit.text()),
+                    self.pxSize,
                     np.float(self.lineLengthEdit.text()),
                     np.float(self.thetaStepEdit.text()),
                     np.float(self.deltaAngleEdit.text()),
