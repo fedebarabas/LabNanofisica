@@ -363,12 +363,16 @@ class Grid:
 
     def __init__(self, viewbox, image, n=10):
 
-        shape = image.shape
+        self.vb = viewbox
+        self.n = n
 
+        shape = image.shape
         pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
-        rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
-        rect.setPen(pen)
-        viewbox.addItem(rect)
+        self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
+        self.rect.setPen(pen)
+        self.vb.addItem(self.rect)
+        self.xLines = []
+        self.yLines = []
 
         for i in np.arange(0, n - 1):
             cx = (shape[0]/n)*(i + 1)
@@ -377,7 +381,18 @@ class Grid:
             liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
             linex.setPen(pen)
             liney.setPen(pen)
-            viewbox.addItem(linex)
-            viewbox.addItem(liney)
+            self.vb.addItem(linex)
+            self.vb.addItem(liney)
+            self.xLines.append(linex)
+            self.yLines.append(liney)
 
-    def update()
+    def update(self, image):
+
+        shape = image.shape
+        self.rect.setRect(0, 0, shape[0], shape[1])
+
+        for i in np.arange(0, self.n - 1):
+            cx = (shape[0]/self.n)*(i + 1)
+            cy = (shape[1]/self.n)*(i + 1)
+            self.xLines[i].setLine(0, cx, shape[0], cx)
+            self.yLines[i].setLine(cy, 0, cy, shape[1])

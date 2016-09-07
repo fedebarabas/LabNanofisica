@@ -42,9 +42,9 @@ class Gollum(QtGui.QMainWindow):
         self.buttonWidget = QtGui.QWidget()
 
         # layout of the three widgets
-        self.mainLayout.addWidget(self.inputWidget, 0, 0, 2, 1)
-        self.mainLayout.addWidget(self.outputWidget, 0, 1, 2, 1)
-        self.mainLayout.addWidget(self.buttonWidget, 0, 2, 1, 1)
+        self.mainLayout.addWidget(self.inputWidget, 0, 1, 2, 1)
+        self.mainLayout.addWidget(self.outputWidget, 0, 2, 2, 1)
+        self.mainLayout.addWidget(self.buttonWidget, 0, 0, 1, 1)
 
         self.inputImgItem = pg.ImageItem()
         self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
@@ -62,6 +62,7 @@ class Gollum(QtGui.QMainWindow):
         imInput = Image.open(path)
         self.inputData = np.array(imInput)
         self.inputImgItem.setImage(self.inputData)
+        self.grid = tools.Grid(self.inputVb, self.inputData)
 
         self.outputImg = pg.ImageItem()
         self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
@@ -160,7 +161,7 @@ class Gollum(QtGui.QMainWindow):
     def loadImage(self, pxSize, crop=0):
 
         # We need 1um sized subimages
-        subimgPxSize = 1000/pxSize
+#        subimgPxSize = 1000/pxSize
         self.filename = utils.getFilename("Load image",
                                           [('Tiff file', '.tif')])
         self.inputData = np.array(Image.open(self.filename))
@@ -168,9 +169,9 @@ class Gollum(QtGui.QMainWindow):
         self.inputData = self.inputData[crop:shape[0] - crop,
                                         crop:shape[1] - crop]
         self.inputImgItem.setImage(self.inputData)
-        n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
+#        n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
 
-        tools.setGrid(self.inputVb, self.inputData, n)
+        self.grid.update(self.inputData)
 
         self.inputVb.setLimits(xMin=-0.5, xMax=2*self.inputData.shape[0] - 0.5,
                                minXRange=4, yMin=-0.5,
