@@ -70,12 +70,11 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.sinPowerEdit = QtGui.QLineEdit('2')
         self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
-        self.pxSizeEdit = QtGui.QLineEdit('20')
-        self.stormCropButton = QtGui.QPushButton('STORM crop')
+        self.pxSizeEdit = QtGui.QLineEdit('1000')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
-        self.roiSizeEdit = QtGui.QLineEdit('50')
+        self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
         self.sigmaEdit = QtGui.QLineEdit('60')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
@@ -83,17 +82,17 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
 
-        self.roiLabel = QtGui.QLabel('ROI size (px)')
+        self.roiLabel = QtGui.QLabel('ROI size [nm]')
         self.corrThresLabel = QtGui.QLabel('Correlation threshold')
-        self.thetaStepLabel = QtGui.QLabel('Angular step (°)')
-        self.deltaThLabel = QtGui.QLabel('Delta Angle (°)')
-        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter (nm)')
+        self.thetaStepLabel = QtGui.QLabel('Angular step [°]')
+        self.deltaThLabel = QtGui.QLabel('Delta Angle [°]')
+        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter [nm]')
         self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.pxSizeLabel = QtGui.QLabel('Pixel size (nm)')
+        self.pxSizeLabel = QtGui.QLabel('Pixel size [nm]')
         self.intThrLabel = QtGui.QLabel('# of times from mean intensity')
         self.lineLengthLabel = QtGui.QLabel('Direction lines min length [nm]')
         # Direction lines lengths are expressed in fraction of subimg size
-        self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
+        self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
 
         settingsFrame = QtGui.QFrame(self)
         settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
@@ -104,28 +103,27 @@ class GollumDeveloper(QtGui.QMainWindow):
         settingsLayout.addWidget(settingsTitle, 0, 0)
         settingsLayout.addWidget(self.roiLabel, 1, 0)
         settingsLayout.addWidget(self.roiSizeEdit, 1, 1)
-        settingsLayout.addWidget(self.corrButton, 2, 0, 1, 2)
-        settingsLayout.addWidget(self.corrThresLabel, 3, 0)
-        settingsLayout.addWidget(self.corrThresEdit, 3, 1)
-        settingsLayout.addWidget(self.wvlenLabel, 4, 0)
-        settingsLayout.addWidget(self.wvlenEdit, 4, 1)
-        settingsLayout.addWidget(self.sinPowerLabel, 5, 0)
-        settingsLayout.addWidget(self.sinPowerEdit, 5, 1)
-        settingsLayout.addWidget(self.thetaStepLabel, 6, 0)
-        settingsLayout.addWidget(self.thetaStepEdit, 6, 1)
-        settingsLayout.addWidget(self.deltaThLabel, 7, 0)
-        settingsLayout.addWidget(self.deltaThEdit, 7, 1)
-        settingsLayout.addWidget(self.dirButton, 8, 0, 1, 2)
-        settingsLayout.addWidget(self.lineLengthLabel, 9, 0)
-        settingsLayout.addWidget(self.lineLengthEdit, 9, 1)
-        settingsLayout.addWidget(self.sigmaLabel, 10, 0)
-        settingsLayout.addWidget(self.sigmaEdit, 10, 1)
-        settingsLayout.addWidget(self.filterImageButton, 11, 0, 1, 2)
-        settingsLayout.addWidget(self.intThrButton, 12, 0, 1, 2)
-        settingsLayout.addWidget(self.intThrLabel, 13, 0)
-        settingsLayout.addWidget(self.intThrEdit, 13, 1)
-        settingsLayout.addWidget(self.stormCropButton, 14, 0, 1, 2)
-        settingsFrame.setFixedHeight(420)
+        settingsLayout.addWidget(self.intThrLabel, 2, 0)
+        settingsLayout.addWidget(self.intThrEdit, 2, 1)
+        settingsLayout.addWidget(self.intThrButton, 3, 0, 1, 2)
+        settingsLayout.addWidget(self.sigmaLabel, 4, 0)
+        settingsLayout.addWidget(self.sigmaEdit, 4, 1)
+        settingsLayout.addWidget(self.filterImageButton, 5, 0, 1, 2)
+        settingsLayout.addWidget(self.lineLengthLabel, 6, 0)
+        settingsLayout.addWidget(self.lineLengthEdit, 6, 1)
+        settingsLayout.addWidget(self.dirButton, 7, 0, 1, 2)
+        settingsLayout.addWidget(self.corrThresLabel, 8, 0)
+        settingsLayout.addWidget(self.corrThresEdit, 8, 1)
+        settingsLayout.addWidget(self.wvlenLabel, 9, 0)
+        settingsLayout.addWidget(self.wvlenEdit, 9, 1)
+        settingsLayout.addWidget(self.sinPowerLabel, 10, 0)
+        settingsLayout.addWidget(self.sinPowerEdit, 10, 1)
+        settingsLayout.addWidget(self.thetaStepLabel, 11, 0)
+        settingsLayout.addWidget(self.thetaStepEdit, 11, 1)
+        settingsLayout.addWidget(self.deltaThLabel, 12, 0)
+        settingsLayout.addWidget(self.deltaThEdit, 12, 1)
+        settingsLayout.addWidget(self.corrButton, 13, 0, 1, 2)
+        settingsFrame.setFixedHeight(400)
 
         buttonWidget = QtGui.QWidget()
         buttonsLayout = QtGui.QGridLayout()
@@ -148,7 +146,6 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.filterImageButton.clicked.connect(self.imageWidget.imageFilter)
         self.dirButton.clicked.connect(self.imageWidget.getDirection)
         self.intThrButton.clicked.connect(self.imageWidget.intThreshold)
-        self.stormCropButton.clicked.connect(self.imageWidget.stormCrop)
 
 
 class ImageWidget(pg.GraphicsLayoutWidget):
@@ -159,48 +156,39 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.main = main
         self.setWindowTitle('ImageGUI')
-        self.subimgSize = 100
+        self.subImgSize = 100
 
-        # Item for displaying 10x10 image data
+        # Item for displaying input image data
         self.inputVb = self.addViewBox(row=0, col=0)
-        self.bigimg = pg.ImageItem()
-        self.inputVb.addItem(self.bigimg)
+        self.inputImg = pg.ImageItem()
+        self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
 
         # Custom ROI for selecting an image region
         self.roi = pg.ROI([0, 0], [0, 0])
-        self.roiSizeX = np.float(self.main.roiSizeEdit.text())
-        self.roiSizeY = np.float(self.main.roiSizeEdit.text())
-        self.roi.setSize(self.roiSizeX, self.roiSizeY)
         self.roi.addScaleHandle([1, 1], [0, 0], lockAspect=True)
         self.inputVb.addItem(self.roi)
         self.roi.setZValue(10)  # make sure ROI is drawn above image
 
         # Contrast/color control
-        self.bigimg_hist = pg.HistogramLUTItem()
-        self.bigimg_hist.gradient.loadPreset('thermal')
-        self.bigimg_hist.setImageItem(self.bigimg)
-        self.addItem(self.bigimg_hist, row=0, col=1)
+        self.inputImgHist = pg.HistogramLUTItem()
+        self.inputImgHist.gradient.loadPreset('thermal')
+        self.inputImgHist.setImageItem(self.inputImg)
+        self.addItem(self.inputImgHist, row=0, col=1)
 
         # subimg
-        self.subimg = pg.ImageItem()
-        subimg_hist = pg.HistogramLUTItem(image=self.subimg)
-        subimg_hist.gradient.loadPreset('thermal')
-        self.addItem(subimg_hist, row=1, col=1)
+        self.subImg = pg.ImageItem()
+        subimgHist = pg.HistogramLUTItem(image=self.subImg)
+        subimgHist.gradient.loadPreset('thermal')
+        self.addItem(subimgHist, row=1, col=1)
 
-        self.dirPlot = pg.PlotItem(title="Subimage")
-        self.dirPlot.addItem(self.subimg)
-        self.addItem(self.dirPlot, row=1, col=0)
+        self.subImgPlot = pg.PlotItem(title="Subimage")
+        self.subImgPlot.addItem(self.subImg)
+        self.addItem(self.subImgPlot, row=1, col=0)
 
-        # load image
-        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
-                            'spectrin1.tif')
-        self.im = Image.open(path)
-        self.inputData = np.array(self.im)
-        self.bigimg.setImage(self.inputData)
-        self.bigimg_hist.setLevels(self.inputData.min(), self.inputData.max())
-
-        self.grid = tools.Grid(self.inputVb, self.inputData)
+        # Load sample STED image
+        self.loadSTED(os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
+                                   'spectrin1.tif'))
 
         # Correlation
         self.pCorr = pg.PlotItem(title="Correlation")
@@ -223,57 +211,74 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.roi.sigRegionChanged.connect(self.updatePlot)
 
-    def loadImage(self):
+    def loadImage(self, pxSize, crop=0, filename=None):
+
+        self.pxSize = pxSize
 
         self.inputVb.clear()
-        pxSize = np.float(self.main.pxSizeEdit.text())
-        subimgPxSize = 1000/pxSize
-        self.filename = utils.getFilename("Load image",
-                                          [('Tiff file', '.tif')])
+
+        if filename is None:
+            self.filename = utils.getFilename("Load image",
+                                              [('Tiff file', '.tif')])
+        else:
+            self.filename = filename
+
         self.inputData = np.array(Image.open(self.filename))
-        self.bigimg = pg.ImageItem()
-        self.inputVb.addItem(self.bigimg)
+        self.shape = self.inputData.shape
+        self.inputData = self.inputData[crop:self.shape[0] - crop,
+                                        crop:self.shape[1] - crop]
+        self.inputImg = pg.ImageItem()
+        self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
-        self.bigimg.setImage(self.inputData)
-        self.bigimg_hist.setImageItem(self.bigimg)
-        self.addItem(self.bigimg_hist, row=0, col=1)
+        self.inputImg.setImage(self.inputData)
+        self.inputImgHist.setImageItem(self.inputImg)
+        self.addItem(self.inputImgHist, row=0, col=1)
         self.inputVb.addItem(self.roi)
-        self.setGrid(np.int(np.shape(self.inputData)[0]/subimgPxSize))
 
-        self.inputVb.setLimits(xMin=-0.05*self.inputData.shape[0],
-                               xMax=1.05*self.inputData.shape[0], minXRange=4,
-                               yMin=-0.05*self.inputData.shape[1],
-                               yMax=1.05*self.inputData.shape[1], minYRange=4)
+        # We need 1um n-sized subimages
+        subimgPxSize = 1000/self.pxSize
+        self.n = (np.array(self.shape)/subimgPxSize).astype(int)
+        self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
-    def loadSTED(self):
-        self.loadImage(np.float(self.STEDPxEdit.text()))
-        self.pxSize = np.float(self.STEDMPxEdit.text())
+        self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                               xMax=1.05*self.shape[0], minXRange=4,
+                               yMin=-0.05*self.shape[1],
+                               yMax=1.05*self.shape[1], minYRange=4)
 
-    def loadSTORM(self):
+        self.updateROI()
+
+        self.intMean = np.mean(self.inputData)
+
+    def loadSTED(self, filename=None):
+        self.loadImage(np.float(self.main.STEDPxEdit.text()),
+                       filename=filename)
+
+    def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.excludedEdit.text())
         mag = np.float(self.magnificationEdit.text())
-        self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag)
-        self.pxSize = np.float(self.STORMPxEdit.text())
+        self.loadImage(np.float(self.main.STORMPxEdit.text()),
+                       crop=nExcluded*mag, filename=filename)
 
     def updatePlot(self):
-
-        self.dirPlot.clear()
-        self.selected = self.roi.getArrayRegion(self.inputData, self.bigimg)
-        self.subimg.setImage(self.selected)
-        self.subimgSize = np.shape(self.selected)[0]
-        self.dirPlot.addItem(self.subimg)
+        self.selected = self.roi.getArrayRegion(self.inputData, self.inputImg)
+        shape = self.selected.shape
+        self.subImgSize = shape[0]
+        self.subImgPlot.clear()
+        self.subImg.setImage(self.selected)
+        self.subImgPlot.addItem(self.subImg)
+        self.subImgPlot.vb.setLimits(xMin=-0.05*shape[0], xMax=1.05*shape[0],
+                                     yMin=-0.05*shape[1], yMax=1.05*shape[1],
+                                     minXRange=4, minYRange=4)
+        self.subImgPlot.vb.setRange(xRange=(0, shape[0]), yRange=(0, shape[1]))
 
     def updateROI(self):
-
-        self.roiSizeX = np.float(self.main.roiSizeEdit.text())
-        self.roiSizeY = np.float(self.main.roiSizeEdit.text())
-        self.roi.setSize(self.roiSizeX, self.roiSizeY)
+        self.roiSize = np.float(self.main.roiSizeEdit.text()) / self.pxSize
+        self.roi.setSize(self.roiSize, self.roiSize)
 
     def FFTMethodGUI(self):
-
         print('FFT 2D analysis executed')
 
         thres = np.float(self.main.fftThrEdit.text())
@@ -291,7 +296,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.fft2.setAspectLocked(True)
         self.FFT2img.setImage(fft2output)
 
-        A = self.subimgSize    # size of the subimqge of interest
+        A = self.subImgSize    # size of the subimqge of interest
 
         # draw circles for visulization
         rminX = A*(rmax/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2
@@ -351,7 +356,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         output = tools.corrMethod(self.selected, *args)
         th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
-        self.bestAxon = simAxon(imSize=self.subimgSize, wvlen=wvlen,
+        self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
                                 theta=thetaMax, phase=phaseMax, b=sinPow).data
 
         self.img1.setImage(self.bestAxon)
@@ -384,8 +389,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def intThreshold(self):
         # TO DO: find better criteria
         thr = np.float(self.main.intThrEdit.text())
-        intMean = np.mean(self.inputData)
-        if np.mean(self.selected) < intMean/thr:
+        if np.mean(self.selected) < self.intMean/thr:
             print('BACKGROUND')
         else:
             print('NEURON')
@@ -399,7 +403,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         binary = img > thresh
 
         self.inputData *= binary
-        self.bigimg.setImage(self.inputData)
+        self.inputImg.setImage(self.inputData)
 
     def getDirection(self):
 
@@ -416,11 +420,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # find edges
         edges = filters.sobel(binary)
 
-        print(self.subimgSize*(2/5))
+        print(self.subImgSize*(2/5))
         # get directions
         linLen = np.float(self.main.lineLengthEdit.text())
         lines = probabilistic_hough_line(edges, threshold=10,
-                                         line_length=self.subimgSize*linLen,
+                                         line_length=self.subImgSize*linLen,
                                          line_gap=3)
 
         # plot and save the angles of the lines
@@ -429,7 +433,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             p0, p1 = line
             pen = pg.mkPen(color=(0, 255, 100), width=1,
                            style=QtCore.Qt.SolidLine, antialias=True)
-            self.dirPlot.plot((p0[1], p1[1]), (p0[0], p1[0]), pen=pen)
+            self.subImgPlot.plot((p0[1], p1[1]), (p0[0], p1[0]), pen=pen)
 
             # get the m coefficient of the lines and the angle
             m = (p1[0]-p0[0])/(p1[1]-p0[1])
@@ -448,21 +452,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.stdAngle = np.std(angleArr)
 
         print('Angle is {} +/- {}'.format(self.meanAngle, self.stdAngle))
-
-    def stormCrop(self):
-
-        self.inputData = self.inputData[59:-59, 59:-59]
-        self.inputVb.clear()
-        self.inputVb.addItem(self.bigimg)
-        self.inputVb.setAspectLocked(True)
-        self.bigimg.setImage(self.inputData)
-        self.bigimg_hist.setImageItem(self.bigimg)
-        self.addItem(self.bigimg_hist, row=0, col=1)
-        self.inputVb.addItem(self.roi)
-        pxSize = np.float(self.main.pxSizeEdit.text())
-        subimgPxSize = 1000/pxSize
-        tools.setGrid(self.inputVb, self.inputData,
-                      np.int(np.shape(self.inputData)[0]/subimgPxSize))
 
 if __name__ == '__main__':
 

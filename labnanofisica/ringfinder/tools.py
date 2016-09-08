@@ -361,33 +361,27 @@ def setGrid(viewbox, image, n=10):
 
 class Grid:
 
-    def __init__(self, viewbox, image, n=10):
+    def __init__(self, viewbox, shape, n=[10, 10]):
         self.vb = viewbox
         self.n = n
         self.lines = []
-        self.draw(image)
 
-    def draw(self, image):
-        shape = image.shape
         pen = QtGui.QPen(QtCore.Qt.yellow, shape[0]//250, QtCore.Qt.SolidLine)
         self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
         self.rect.setPen(pen)
         self.vb.addItem(self.rect)
         self.lines.append(self.rect)
 
-        for i in np.arange(0, self.n - 1):
-            cx = (shape[0]/self.n)*(i + 1)
-            cy = (shape[1]/self.n)*(i + 1)
-            linex = QtGui.QGraphicsLineItem(0, cx, shape[0], cx)
-            liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
-            linex.setPen(pen)
-            liney.setPen(pen)
-            self.vb.addItem(linex)
-            self.vb.addItem(liney)
-            self.lines.append(linex)
-            self.lines.append(liney)
+        for i in np.arange(0, self.n[0] - 1):
+            cx = (shape[0]/self.n[0])*(i + 1)
+            line = QtGui.QGraphicsLineItem(cx, 0, cx, shape[1])
+            line.setPen(pen)
+            self.vb.addItem(line)
+            self.lines.append(line)
 
-#    def clear(self):
-#
-#        for line in self.lines:
-#            self.vb.removeItem(line)
+        for i in np.arange(0, self.n[1] - 1):
+            cy = (shape[1]/self.n[1])*(i + 1)
+            line = QtGui.QGraphicsLineItem(0, cy, shape[0], cy)
+            line.setPen(pen)
+            self.vb.addItem(line)
+            self.lines.append(line)
