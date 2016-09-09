@@ -10,7 +10,6 @@ import numpy as np
 
 from scipy import ndimage as ndi
 import skimage.filters as filters
-from skimage.transform import probabilistic_hough_line
 
 from PIL import Image
 import pyqtgraph as pg
@@ -27,12 +26,10 @@ class GollumDeveloper(QtGui.QMainWindow):
 
         super().__init__(*args, **kwargs)
 
-        self.setWindowTitle('Ring Finder Developer')
+        self.setWindowTitle('Gollum Developer')
 
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
-
-#        self.setFixedSize(1275, 800)
 
         # Separate frame for loading controls
         loadFrame = QtGui.QFrame(self)
@@ -67,10 +64,9 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.corrThresEdit = QtGui.QLineEdit('0.1')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('30')
-        self.sinPowerEdit = QtGui.QLineEdit('2')
+        self.sinPowerEdit = QtGui.QLineEdit('3')
         self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
-        self.pxSizeEdit = QtGui.QLineEdit('1000')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.pointsThrEdit = QtGui.QLineEdit('0.6')
@@ -89,7 +85,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter [nm]')
         self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
         self.pxSizeLabel = QtGui.QLabel('Pixel size [nm]')
-        self.intThrLabel = QtGui.QLabel('# of times from mean intensity')
+        self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
         self.lineLengthLabel = QtGui.QLabel('Direction lines min length [nm]')
         # Direction lines lengths are expressed in fraction of subimg size
         self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
@@ -138,6 +134,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.imageWidget = ImageWidget(self)
         layout.addWidget(self.imageWidget, 0, 1)
         layout.setColumnMinimumWidth(1, 1000)
+        layout.setRowMinimumHeight(0, 850)
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
         self.loadSTORMButton.clicked.connect(self.imageWidget.loadSTORM)
@@ -146,6 +143,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.filterImageButton.clicked.connect(self.imageWidget.imageFilter)
         self.dirButton.clicked.connect(self.imageWidget.getDirection)
         self.intThrButton.clicked.connect(self.imageWidget.intThreshold)
+        self.corrButton.clicked.connect(self.imageWidget.corrMethodGUI)
 
 
 class ImageWidget(pg.GraphicsLayoutWidget):
@@ -247,7 +245,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.updateROI()
 
-        self.intMean = np.mean(self.inputData)
+        self.dataMean = np.mean(self.inputData)
+        self.dataStd = np.std(self.inputData)
 
     def loadSTED(self, filename=None):
         self.loadImage(np.float(self.main.STEDPxEdit.text()),
@@ -278,83 +277,22 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.roiSize = np.float(self.main.roiSizeEdit.text()) / self.pxSize
         self.roi.setSize(self.roiSize, self.roiSize)
 
-    def FFTMethodGUI(self):
-        print('FFT 2D analysis executed')
-
-        thres = np.float(self.main.fftThrEdit.text())
-        fft2output, coord, rlim, rings = tools.FFTMethod(self.selected, thres)
-        rmin, rmax = rlim
-
-        if rings:
-            print('¡HAY ANILLOS!')
-        else:
-            print('NO HAY ANILLOS')
-
-        # plot results
-        self.fft2.clear()       # remove previous fft2
-        self.fft2.addItem(self.FFT2img)
-        self.fft2.setAspectLocked(True)
-        self.FFT2img.setImage(fft2output)
-
-        A = self.subImgSize    # size of the subimqge of interest
-
-        # draw circles for visulization
-        rminX = A*(rmax/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2
-        rminY = A*(rmax/100)*np.sin(np.linspace(0, 2*np.pi, 1000))+A/2
-        rmaxX = A*(rmin/100)*np.cos(np.linspace(0, 2*np.pi, 1000))+A/2
-        rmaxY = A*(rmin/100)*np.sin(np.linspace(0, 2*np.pi, 1000))+A/2
-        self.fft2.plot(rminX, rminY, pen=(0, 102, 204))
-        self.fft2.plot(rmaxX, rmaxY, pen=(0, 102, 204))
-
-        # plot local maxima
-        self.fft2.plot(coord[:, 0], coord[:, 1], pen=None,
-                       symbolBrush=(0, 102, 204), symbolPen='w')
-
-    def pointsMethodGUI(self):
-
-        print('Points analysis executed')
-
-        # clear previous plot
-        self.pointsPlot.clear()
-
-        # set points analysis thereshold
-        thres = np.float(self.main.pointsThrEdit.text())
-        points, D, rings = tools.pointsMethod(self.selected, thres)
-
-        if rings:
-            print('¡HAY ANILLOS!')
-            pen = pg.mkPen(color=(0, 255, 100), width=1,
-                           style=QtCore.Qt.SolidLine, antialias=True)
-            for d in D:
-                self.pointsPlot.plot([d[0][0], d[1][0], d[2][0]],
-                                     [d[0][1], d[1][1], d[2][1]], pen=pen,
-                                     symbolBrush=(0, 204, 122), symbolPen='w')
-        else:
-            print('NO HAY ANILLOS')
-
-        # plot results
-        self.pointsPlot.addItem(self.pointsImg)
-        self.pointsImg.setImage(self.selected)
-        self.pointsPlot.plot(points[:, 0], points[:, 1], pen=None,
-                             symbolBrush=(0, 204, 122), symbolPen='w')
-
     def corrMethodGUI(self):
 
         self.pCorr.clear()
 
         # for every subimg, we apply the correlation method for
         # ring finding
-        corrThres = np.float(self.corrThresEdit.text())
-        thStep = np.float(self.thetaStepEdit.text())
-        deltaTh = np.float(self.deltaThEdit.text())
-        wvlen = np.float(self.wvlenEdit.text())
-        sinPow = np.float(self.sinPowerEdit.text())
-        args = [corrThres, np.float(self.sigmaEdit.text()),
-                np.float(self.pxSizeEdit.text()),
-                np.float(self.lineLengthEdit.text()),
-                thStep, deltaTh, wvlen, sinPow]
-        output = tools.corrMethod(self.selected, *args)
-        th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
+        corrThres = np.float(self.main.corrThresEdit.text())
+        sigma = np.float(self.main.sigmaEdit.text()) / self.pxSize
+        minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
+        thStep = np.float(self.main.thetaStepEdit.text())
+        deltaTh = np.float(self.main.deltaThEdit.text())
+        wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
+        sinPow = np.float(self.main.sinPowerEdit.text())
+        args = [corrThres, sigma, minLen, thStep, deltaTh, wvlen, sinPow]
+        output = tools.corrMethod(self.selected, *args, developer=True)
+        self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
         self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
                                 theta=thetaMax, phase=phaseMax, b=sinPow).data
@@ -374,9 +312,9 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.pCorr.showGrid(x=False, y=False)
 
         # plot the area given by the direction (meanAngle) and the deltaTh
-        if self.meanAngle is not None:
-            thetaArea = np.arange(self.meanAngle - deltaTh,
-                                  self.meanAngle + deltaTh, dtype=int)
+        if self.th0 is not None:
+            thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh,
+                                  dtype=int)
             self.pCorr.plot(thetaArea, 0.3*np.ones(np.size(deltaTh)),
                             fillLevel=0, brush=(50, 50, 200, 100))
         self.pCorr.showGrid(x=True, y=True)
@@ -387,14 +325,14 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             print('NO HAY ANILLOS')
 
     def intThreshold(self):
-        # TO DO: find better criteria
         thr = np.float(self.main.intThrEdit.text())
-        if np.mean(self.selected) < self.intMean/thr:
-            print('BACKGROUND')
-        else:
+        if np.any(self.selected > self.dataMean + thr*self.dataStd):
             print('NEURON')
+        else:
+            print('BACKGROUND')
 
     def imageFilter(self):
+        ''' Removes background data from image.'''
 
         sigma = np.float(self.main.sigmaEdit.text())
         img = ndi.gaussian_filter(self.inputData, sigma)
@@ -407,51 +345,21 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
     def getDirection(self):
 
-        # gaussian filter to get low resolution image
         sigma = np.float(self.main.sigmaEdit.text())
-        pxSize = np.float(self.main.pxSizeEdit.text())
-        sigma_px = sigma/pxSize
-        img = ndi.gaussian_filter(self.selected, sigma_px)
+        minLen = np.float(self.main.lineLengthEdit.text())
+        sigma /= self.pxSize
+        minLen /= self.pxSize
+        self.th0, lines = tools.getDirection(self.selected, sigma, minLen)
 
-        # binarization of image
-        thresh = filters.threshold_otsu(img)
-        binary = img > thresh
+        print('Angle is {}, calculated from {} lines'.format(self.th0,
+                                                             len(lines)))
 
-        # find edges
-        edges = filters.sobel(binary)
-
-        print(self.subImgSize*(2/5))
-        # get directions
-        linLen = np.float(self.main.lineLengthEdit.text())
-        lines = probabilistic_hough_line(edges, threshold=10,
-                                         line_length=self.subImgSize*linLen,
-                                         line_gap=3)
-
-        # plot and save the angles of the lines
-        angleArr = []
+        # Lines plot
+        pen = pg.mkPen(color=(0, 255, 100), width=1, style=QtCore.Qt.SolidLine,
+                       antialias=True)
         for line in lines:
             p0, p1 = line
-            pen = pg.mkPen(color=(0, 255, 100), width=1,
-                           style=QtCore.Qt.SolidLine, antialias=True)
             self.subImgPlot.plot((p0[1], p1[1]), (p0[0], p1[0]), pen=pen)
-
-            # get the m coefficient of the lines and the angle
-            m = (p1[0]-p0[0])/(p1[1]-p0[1])
-            angle = (180/np.pi)*np.arctan(m)
-
-            if angle < 0:
-                angle = angle + 180
-            else:
-                pass
-
-            angleArr.append(angle)
-
-        # calculate mean angle and its standard deviation
-        print(angleArr)
-        self.meanAngle = np.mean(angleArr)
-        self.stdAngle = np.std(angleArr)
-
-        print('Angle is {} +/- {}'.format(self.meanAngle, self.stdAngle))
 
 if __name__ == '__main__':
 

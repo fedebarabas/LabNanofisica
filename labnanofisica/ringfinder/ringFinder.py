@@ -210,6 +210,8 @@ class Gollum(QtGui.QMainWindow):
         m = self.subimgNum
 
         # shape the data into the subimg that we need for the analysis
+        mean = np.mean(self.inputData)
+        std = np.std(self.inputData)
         self.blocksInput = tools.blockshaped(self.inputData,
                                              self.inputData.shape[0]/m,
                                              self.inputData.shape[0]/m)
@@ -220,21 +222,29 @@ class Gollum(QtGui.QMainWindow):
         self.localCorr = np.zeros(nBlocks)
 
         # for every subimg, we apply the correlation method for ring finding
+        minLen = np.float(self.lineLengthEdit.text())/self.pxSize
+        wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+        sigma = np.float(self.sigmaEdit.text())/self.pxSize
         for i in np.arange(nBlocks):
-            args = [np.float(self.corr2thrEdit.text()),
-                    np.float(self.sigmaEdit.text()),
-                    self.pxSize,
-                    np.float(self.lineLengthEdit.text()),
-                    np.float(self.thetaStepEdit.text()),
-                    np.float(self.deltaAngleEdit.text()),
-                    np.float(self.wvlenEdit.text()),
-                    np.float(self.sinPowerEdit.text())]
-            output = tools.corrMethod(self.blocksInput[i, :, :], *args)
-            angle, corrTheta, corrMax, theta, phase, rings = output
 
-            # Store results
-            self.localCorr[i] = corrMax
-            M[i] = rings
+            block = self.blocksInput[i, :, :]
+
+            # First discrimination for signal level.
+            if np.any(block > mean + 3*std):
+                args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
+                        np.float(self.thetaStepEdit.text()),
+                        np.float(self.deltaAngleEdit.text()), wvlen,
+                        np.float(self.sinPowerEdit.text())]
+                output = tools.corrMethod(block, *args)
+                angle, corrTheta, corrMax, theta, phase, rings = output
+
+                # Store results
+                self.localCorr[i] = corrMax
+                M[i] = rings
+
+            else:
+                self.localCorr[i] = 0
+                M[i] = False
 
         # code for visualization of the output
         M1 = M.reshape(m, m)

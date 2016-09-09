@@ -12,6 +12,7 @@ import skimage.filters as filters
 from skimage.transform import probabilistic_hough_line
 
 from pyqtgraph.Qt import QtCore, QtGui
+import pyqtgraph as pg
 
 from labnanofisica.ringfinder.neurosimulations import simAxon
 
@@ -95,44 +96,35 @@ def arrayExt(array):
     return z
 
 
-def getDirection(data, sigma, pxSize, minLen):
+def getDirection(data, sigma, minLen):
     """Returns the direction (angle) of the neurite in the image data.
 
-    sigma: gaussian filter sigma to blur the image, in nm
-    pxSize: size of px in nm
-    minLen: minimum  line length in nm."""
+    sigma: gaussian filter sigma to blur the image, in px
+    minLen: minimum  line length in px."""
 
     # gaussian filter to get low resolution image
-    sigma_px = sigma/pxSize
-    img = ndi.gaussian_filter(data, sigma_px)
+    img = ndi.gaussian_filter(data, sigma)
 
-    # TO DO: good cond on intensity
-    if np.sum(img) < 10:
-        return None
+    # binarization of image
+    thresh = filters.threshold_otsu(img)
+    binary = img > thresh
+    th0, sigmaTh, lines = linesFromBinary(binary, minLen)
+
+    if th0 is not None:
+
+        # if the std is too high it's probably the case of flat angles,
+        # i.e., 181, -2, 0.3, -1, 179
+        # TO DO: find optimal threshold, 40 is arbitrary
+        if sigmaTh > 40:
+            print('std too big, will rotate data and try again')
+            binary = np.rot90(binary)
+            th0, sigmaTh, lines = linesFromBinary(binary, minLen)
+            return th0 - 90, lines
+        else:
+            return th0, lines
 
     else:
-        # binarization of image
-        thresh = filters.threshold_otsu(img)
-        binary = img > thresh
-
-        minLen /= pxSize    # minLen in pxs
-        meanAngle, stdAngle = linesFromBinary(binary, minLen)
-
-        if meanAngle is not None:
-
-            # if the std is too high it's probably the case of flat angles,
-            # i.e., 181, -2, 0.3, -1, 179
-            # TO DO: find optimal threshold, 40 is arbitrary
-            if stdAngle > 40:
-                print('std too big, will rotate data and try again')
-                binary = np.rot90(binary)
-                meanAngle, stdAngle = linesFromBinary(binary, minLen)
-                return meanAngle - 90
-            else:
-                return meanAngle
-
-        else:
-            return None
+        return None, lines
 
 
 def linesFromBinary(binaryData, minLen):
@@ -148,7 +140,7 @@ def linesFromBinary(binaryData, minLen):
     angleArr = []
 
     if lines == []:
-        return None, None
+        return None, None, lines
 
     else:
         for line in lines:
@@ -164,24 +156,23 @@ def linesFromBinary(binaryData, minLen):
             angleArr.append(angle)
 
         # calculate mean angle and its standard deviation
-        print('angleArr is {}'.format(np.around(angleArr, 1)))
+#        print('angleArr is {}'.format(np.around(angleArr, 1)))
 
-        return np.mean(angleArr), np.std(angleArr)
+        return np.mean(angleArr), np.std(angleArr), lines
 
 
-def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
-               sinPow, developer=False):
+def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
+               developer=False):
     """Searches for rings by correlating the image data with a given
     sinusoidal pattern
 
     data: 2D image data
     thres: discrimination threshold for the correlated data.
-    sigma: gaussian filter sigma to blur the image, in nm
-    pxSize: size of px in nm
-    minLen: minimum line length in nm.
+    sigma: gaussian filter sigma to blur the image, in px
+    minLen: minimum line length in px.
     thStep: angular step size
     deltaTh: maximum pattern rotation angle for correlation matching
-    wvlen: wavelength of the ring pattern, in nm
+    wvlen: wavelength of the ring pattern, in px
     sinPow: power of the pattern function
 
     returns:
@@ -193,7 +184,7 @@ def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
     rings (bool): ring presence"""
 
     # line angle calculated
-    th0 = getDirection(data, sigma, pxSize, minLen)
+    th0, lines = getDirection(data, sigma, minLen)
 
     if th0 is None:
         return th0, 0, 0, 0, 0, False
@@ -214,8 +205,6 @@ def corrMethod(data, thres, sigma, pxSize, minLen, thStep, deltaTh, wvlen,
         corrPhase = np.zeros(np.size(phase))
         corrPhaseArg = np.zeros(np.size(theta))
         corrTheta = np.zeros(np.size(theta))
-
-        wvlen = wvlen/pxSize  # wvlen in px
 
         # for now we correlate with the full sin2D pattern
         for t in np.arange(len(theta)):
@@ -339,26 +328,6 @@ def pointsMethod(self, data, thres=.3):
     return points, D, rings
 
 
-def setGrid(viewbox, image, n=10):
-
-    shape = image.shape
-
-    pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
-    rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
-    rect.setPen(pen)
-    viewbox.addItem(rect)
-
-    for i in np.arange(0, n - 1):
-        cx = (shape[0]/n)*(i + 1)
-        cy = (shape[1]/n)*(i + 1)
-        linex = QtGui.QGraphicsLineItem(0, cx, shape[0], cx)
-        liney = QtGui.QGraphicsLineItem(cy, 0, cy, shape[1])
-        linex.setPen(pen)
-        liney.setPen(pen)
-        viewbox.addItem(linex)
-        viewbox.addItem(liney)
-
-
 class Grid:
 
     def __init__(self, viewbox, shape, n=[10, 10]):
@@ -366,7 +335,8 @@ class Grid:
         self.n = n
         self.lines = []
 
-        pen = QtGui.QPen(QtCore.Qt.yellow, shape[0]//250, QtCore.Qt.SolidLine)
+        pen = pg.mkPen(color=(255, 255, 0), width=shape[0]//500,
+                       style=QtCore.Qt.SolidLine, antialias=True)
         self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
         self.rect.setPen(pen)
         self.vb.addItem(self.rect)
