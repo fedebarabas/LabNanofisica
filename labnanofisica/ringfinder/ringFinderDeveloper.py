@@ -31,6 +31,8 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
 
+        self.subImgSize = 1000      # subimage size in nm
+
         # Separate frame for loading controls
         loadFrame = QtGui.QFrame(self)
         loadFrame.setFrameStyle(QtGui.QFrame.Panel)
@@ -59,17 +61,13 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadFrame.setFixedHeight(200)
 
         # Ring finding method settings
-        self.FFT2Button = QtGui.QPushButton('FFT 2D')
-        self.corrButton = QtGui.QPushButton('Correlation')
         self.corrThresEdit = QtGui.QLineEdit('0.1')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('30')
         self.sinPowerEdit = QtGui.QLineEdit('3')
-        self.pointsButton = QtGui.QPushButton('Points')
         self.loadimageButton = QtGui.QPushButton('Load Image')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
-        self.pointsThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
         self.sigmaEdit = QtGui.QLineEdit('60')
@@ -77,6 +75,11 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.intThrEdit = QtGui.QLineEdit('3')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
+        self.corrButton = QtGui.QPushButton('Correlation')
+        self.resultLabel = QtGui.QLabel()
+        self.resultLabel.setAlignment(QtCore.Qt.AlignCenter |
+                                      QtCore.Qt.AlignVCenter)
+        self.resultLabel.setTextFormat(QtCore.Qt.RichText)
 
         self.roiLabel = QtGui.QLabel('ROI size [nm]')
         self.corrThresLabel = QtGui.QLabel('Correlation threshold')
@@ -119,6 +122,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         settingsLayout.addWidget(self.deltaThLabel, 12, 0)
         settingsLayout.addWidget(self.deltaThEdit, 12, 1)
         settingsLayout.addWidget(self.corrButton, 13, 0, 1, 2)
+        settingsLayout.addWidget(self.resultLabel, 14, 0, 2, 0)
         settingsFrame.setFixedHeight(400)
 
         buttonWidget = QtGui.QWidget()
@@ -135,6 +139,8 @@ class GollumDeveloper(QtGui.QMainWindow):
         layout.addWidget(self.imageWidget, 0, 1)
         layout.setColumnMinimumWidth(1, 1000)
         layout.setRowMinimumHeight(0, 850)
+        self.move(QtGui.QApplication.desktop().screen().rect().center() -
+                  self.rect().center())
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
         self.loadSTORMButton.clicked.connect(self.imageWidget.loadSTORM)
@@ -145,11 +151,22 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.intThrButton.clicked.connect(self.imageWidget.intThreshold)
         self.corrButton.clicked.connect(self.imageWidget.corrMethodGUI)
 
+    def keyPressEvent(self, event):
+        key = event.key()
+
+        if key == QtCore.Qt.Key_Left:
+            self.imageWidget.roi.moveLeft()
+        elif key == QtCore.Qt.Key_Right:
+            self.imageWidget.roi.moveRight()
+        elif key == QtCore.Qt.Key_Up:
+            self.imageWidget.roi.moveUp()
+        elif key == QtCore.Qt.Key_Down:
+            self.imageWidget.roi.moveDown()
+
 
 class ImageWidget(pg.GraphicsLayoutWidget):
 
     def __init__(self, main, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         self.main = main
@@ -161,12 +178,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputImg = pg.ImageItem()
         self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
-
-        # Custom ROI for selecting an image region
-        self.roi = pg.ROI([0, 0], [0, 0])
-        self.roi.addScaleHandle([1, 1], [0, 0], lockAspect=True)
-        self.inputVb.addItem(self.roi)
-        self.roi.setZValue(10)  # make sure ROI is drawn above image
 
         # Contrast/color control
         self.inputImgHist = pg.HistogramLUTItem()
@@ -184,12 +195,19 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.subImgPlot.addItem(self.subImg)
         self.addItem(self.subImgPlot, row=1, col=0)
 
+        # Custom ROI for selecting an image region
+        pxSize = np.float(self.main.STEDPxEdit.text())
+        self.roi = tools.SubImgROI(self.main.subImgSize/pxSize)
+        self.inputVb.addItem(self.roi)
+        self.roi.setZValue(10)  # make sure ROI is drawn above image
+
         # Load sample STED image
         self.loadSTED(os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
                                    'spectrin1.tif'))
 
         # Correlation
         self.pCorr = pg.PlotItem(title="Correlation")
+        self.pCorr.showGrid(x=True, y=True)
         self.addItem(self.pCorr, row=0, col=2)
 
         # Optimal correlation visualization
@@ -215,7 +233,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.inputVb.clear()
 
-        if filename is None:
+        if not(isinstance(filename, str)):
             self.filename = utils.getFilename("Load image",
                                               [('Tiff file', '.tif')])
         else:
@@ -225,6 +243,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.shape = self.inputData.shape
         self.inputData = self.inputData[crop:self.shape[0] - crop,
                                         crop:self.shape[1] - crop]
+        self.shape = self.inputData.shape
         self.inputImg = pg.ImageItem()
         self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
@@ -244,6 +263,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                                yMax=1.05*self.shape[1], minYRange=4)
 
         self.updateROI()
+        self.updatePlot()
 
         self.dataMean = np.mean(self.inputData)
         self.dataStd = np.std(self.inputData)
@@ -276,6 +296,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def updateROI(self):
         self.roiSize = np.float(self.main.roiSizeEdit.text()) / self.pxSize
         self.roi.setSize(self.roiSize, self.roiSize)
+        self.roi.step = self.main.subImgSize/self.pxSize
 
     def corrMethodGUI(self):
 
@@ -294,35 +315,36 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         output = tools.corrMethod(self.selected, *args, developer=True)
         self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
-        self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
-                                theta=thetaMax, phase=phaseMax, b=sinPow).data
-
-        self.img1.setImage(self.bestAxon)
-        self.img2.setImage(self.selected)
-
-        # plot the threshold of correlation chosen by the user
-        # phase steps are set to 20, TO DO: explore this parameter
-        theta = np.arange(0, 180, thStep)
-        pen1 = pg.mkPen(color=(0, 255, 100), width=2,
-                        style=QtCore.Qt.SolidLine, antialias=True)
-        pen2 = pg.mkPen(color=(255, 50, 60), width=1,
-                        style=QtCore.Qt.SolidLine, antialias=True)
-        self.pCorr.plot(theta, corrTheta, pen=pen1)
-        self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)), pen=pen2)
-        self.pCorr.showGrid(x=False, y=False)
-
-        # plot the area given by the direction (meanAngle) and the deltaTh
         if self.th0 is not None:
-            thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh,
-                                  dtype=int)
-            self.pCorr.plot(thetaArea, 0.3*np.ones(np.size(deltaTh)),
-                            fillLevel=0, brush=(50, 50, 200, 100))
-        self.pCorr.showGrid(x=True, y=True)
+            self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
+                                    theta=thetaMax, phase=phaseMax,
+                                    b=sinPow).data
+            self.img1.setImage(self.bestAxon)
+            self.img2.setImage(self.selected)
+
+            # plot the threshold of correlation chosen by the user
+            # phase steps are set to 20, TO DO: explore this parameter
+            theta = np.arange(0, 180, thStep)
+            pen1 = pg.mkPen(color=(0, 255, 100), width=2,
+                            style=QtCore.Qt.SolidLine, antialias=True)
+            pen2 = pg.mkPen(color=(255, 50, 60), width=1,
+                            style=QtCore.Qt.SolidLine, antialias=True)
+            self.pCorr.plot(theta, corrTheta, pen=pen1)
+            self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)), pen=pen2)
+
+            # plot the area given by the direction (meanAngle) and the deltaTh
+            if self.th0 is not None:
+                thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh,
+                                      dtype=int)
+                if np.any(thetaArea < 0):
+                    thetaArea += 180
+                self.pCorr.plot(thetaArea, 0.3*np.ones(len(thetaArea)),
+                                fillLevel=0, brush=(50, 50, 200, 100))
 
         if rings:
-            print('¡HAY ANILLOS!')
+            self.main.resultLabel.setText('<strong>¡HAY ANILLOS!<\strong>')
         else:
-            print('NO HAY ANILLOS')
+            self.main.resultLabel.setText('<strong>NO HAY ANILLOS<\strong>')
 
     def intThreshold(self):
         thr = np.float(self.main.intThrEdit.text())

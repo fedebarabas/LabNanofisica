@@ -119,7 +119,10 @@ def getDirection(data, sigma, minLen):
             print('std too big, will rotate data and try again')
             binary = np.rot90(binary)
             th0, sigmaTh, lines = linesFromBinary(binary, minLen)
-            return th0 - 90, lines
+            if th0 is not None:
+                return th0 - 90, lines
+            else:
+                return None, lines
         else:
             return th0, lines
 
@@ -187,9 +190,8 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
     th0, lines = getDirection(data, sigma, minLen)
 
     if th0 is None:
-        return th0, 0, 0, 0, 0, False
+        return th0, None, None, None, None, False
     else:
-        print('line angle is {}'.format(np.around(th0, 1)))
         subImgSize = np.shape(data)[0]
 
         # set the angle range to look for a correlation, 179 is added
@@ -335,7 +337,7 @@ class Grid:
         self.n = n
         self.lines = []
 
-        pen = pg.mkPen(color=(255, 255, 0), width=shape[0]//500,
+        pen = pg.mkPen(color=(255, 255, 0), width=1,
                        style=QtCore.Qt.SolidLine, antialias=True)
         self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
         self.rect.setPen(pen)
@@ -355,3 +357,29 @@ class Grid:
             line.setPen(pen)
             self.vb.addItem(line)
             self.lines.append(line)
+
+
+class SubImgROI(pg.ROI):
+
+    def __init__(self, step, *args, **kwargs):
+        super().__init__([0, 0], [0, 0], translateSnap=True, scaleSnap=True,
+                         *args, **kwargs)
+        self.step = step
+        self.keyPos = (0, 0)
+        self.addScaleHandle([1, 1], [0, 0], lockAspect=True)
+
+    def moveUp(self):
+        self.moveRoi(0, self.step)
+
+    def moveDown(self):
+        self.moveRoi(0, -self.step)
+
+    def moveRight(self):
+        self.moveRoi(self.step, 0)
+
+    def moveLeft(self):
+        self.moveRoi(-self.step, 0)
+
+    def moveRoi(self, dx, dy):
+        self.keyPos = (self.keyPos[0] + dx, self.keyPos[1] + dy)
+        self.setPos(self.keyPos)

@@ -5,6 +5,10 @@ Created on Fri Sep  9 13:36:37 2016
 @author: Luciano Masullo / Federico Barabas
 """
 
+        self.FFT2Button = QtGui.QPushButton('FFT 2D')
+        self.pointsButton = QtGui.QPushButton('Points')
+        self.pointsThrEdit = QtGui.QLineEdit('0.6')
+
 def FFTMethodGUI(self):
     print('FFT 2D analysis executed')
 

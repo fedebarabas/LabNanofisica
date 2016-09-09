@@ -149,53 +149,54 @@ class Gollum(QtGui.QMainWindow):
         self.corrButton.clicked.connect(self.ringFinder)
 
         # Load sample STED image
-        path = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
-                            'spectrin1.tif')
-        imInput = Image.open(path)
-        self.inputData = np.array(imInput)
-        self.inputImgItem.setImage(self.inputData)
-        self.pxSize = np.float(self.STEDPxEdit.text())
-        self.grid = tools.Grid(self.inputVb, self.inputData)
-        self.inputVb.setLimits(xMin=-0.05*self.inputData.shape[0],
-                               xMax=1.05*self.inputData.shape[0], minXRange=4,
-                               yMin=-0.05*self.inputData.shape[1],
-                               yMax=1.05*self.inputData.shape[1], minYRange=4)
+        self.loadSTED(os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
+                                   'spectrin1.tif'))
 
-    def loadSTED(self):
-        self.loadImage(np.float(self.STEDPxEdit.text()))
-        self.pxSize = np.float(self.STEDMPxEdit.text())
+    def loadSTED(self, filename=None):
+        self.loadImage(np.float(self.STEDPxEdit.text()),
+                       filename=filename)
 
-    def loadSTORM(self):
+    def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.excludedEdit.text())
         mag = np.float(self.magnificationEdit.text())
-        self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag)
-        self.pxSize = np.float(self.STORMPxEdit.text())
+        self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag,
+                       filename=filename)
 
-    def loadImage(self, pxSize, crop=0, name=None):
+    def loadImage(self, pxSize, crop=0, filename=None):
+
+        self.pxSize = pxSize
 
         self.inputVb.clear()
 
-        # We need 1um sized subimages
-#        subimgPxSize = 1000/pxSize
-        self.filename = utils.getFilename("Load image",
-                                          [('Tiff file', '.tif')])
+        if not(isinstance(filename, str)):
+            self.filename = utils.getFilename("Load image",
+                                              [('Tiff file', '.tif')])
+        else:
+            self.filename = filename
+
         self.inputData = np.array(Image.open(self.filename))
-        shape = self.inputData.shape
-        self.inputData = self.inputData[crop:shape[0] - crop,
-                                        crop:shape[1] - crop]
+        self.shape = self.inputData.shape
+        self.inputData = self.inputData[crop:self.shape[0] - crop,
+                                        crop:self.shape[1] - crop]
+        self.shape = self.inputData.shape
         self.inputVb.addItem(self.inputImgItem)
         self.inputImgItem.setImage(self.inputData)
-#        n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
 
-        self.grid.draw(self.inputData)
+        # We need 1um n-sized subimages
+        subimgPxSize = 1000/self.pxSize
+        self.n = (np.array(self.shape)/subimgPxSize).astype(int)
+        self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
-        self.inputVb.setLimits(xMin=-0.05*self.inputData.shape[0],
-                               xMax=1.05*self.inputData.shape[0], minXRange=4,
-                               yMin=-0.05*self.inputData.shape[1],
-                               yMax=1.05*self.inputData.shape[1], minYRange=4)
+        self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                               xMax=1.05*self.shape[0], minXRange=4,
+                               yMin=-0.05*self.shape[1],
+                               yMax=1.05*self.shape[1], minYRange=4)
+
+        self.dataMean = np.mean(self.inputData)
+        self.dataStd = np.std(self.inputData)
 
     def ringFinder(self):
         """RingFinder handles the input data, and then evaluates every subimg
