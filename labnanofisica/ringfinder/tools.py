@@ -96,7 +96,7 @@ def arrayExt(array):
     return z
 
 
-def getDirection(data, sigma, minLen):
+def getDirection(data, sigma, minLen, debug=False):
     """Returns the direction (angle) of the neurite in the image data.
 
     sigma: gaussian filter sigma to blur the image, in px
@@ -108,29 +108,33 @@ def getDirection(data, sigma, minLen):
     # binarization of image
     thresh = filters.threshold_otsu(img)
     binary = img > thresh
-    th0, sigmaTh, lines = linesFromBinary(binary, minLen)
+    th0, sigmaTh, lines = linesFromBinary(binary, minLen, debug)
+    print('sigma1', sigmaTh)
 
-    if th0 is not None:
-
+    try:
         # if the std is too high it's probably the case of flat angles,
         # i.e., 181, -2, 0.3, -1, 179
-        # TO DO: find optimal threshold, 40 is arbitrary
-        if sigmaTh > 40:
-            print('std too big, will rotate data and try again')
-            binary = np.rot90(binary)
-            th0, sigmaTh, lines = linesFromBinary(binary, minLen)
-            if th0 is not None:
+        # TO DO: find optimal threshold, 20 is arbitrary
+        if sigmaTh > 20:
+            if debug:
+                print('sigmaTh too high, will rotate data and try again')
+            th0, sigmaTh, lines = linesFromBinary(np.rot90(binary), minLen)
+            print('sigma2', sigmaTh)
+            if sigmaTh < 20:
+                if debug:
+                    print('sigmaTh too high in both directions')
                 return th0 - 90, lines
             else:
                 return None, lines
         else:
             return th0, lines
 
-    else:
+    except:
+        # if sigmaTh is None (no lines), this happens
         return None, lines
 
 
-def linesFromBinary(binaryData, minLen):
+def linesFromBinary(binaryData, minLen, debug=False):
 
     # find edges
     edges = filters.sobel(binaryData)
@@ -143,6 +147,8 @@ def linesFromBinary(binaryData, minLen):
     angleArr = []
 
     if lines == []:
+        if debug:
+            print('No lines detected with Hough line algorithm')
         return None, None, lines
 
     else:
@@ -177,6 +183,7 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
     deltaTh: maximum pattern rotation angle for correlation matching
     wvlen: wavelength of the ring pattern, in px
     sinPow: power of the pattern function
+    developer (bool): enables additional output of algorithms
 
     returns:
 
@@ -187,7 +194,7 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
     rings (bool): ring presence"""
 
     # line angle calculated
-    th0, lines = getDirection(data, sigma, minLen)
+    th0, lines = getDirection(data, sigma, minLen, developer)
 
     if th0 is None:
         return th0, None, None, None, None, False
@@ -197,7 +204,7 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
         # set the angle range to look for a correlation, 179 is added
         # because of later corrAngle's expansion
         if developer:
-            theta = np.arange(0, 180, thStep)
+            theta = np.arange(np.min([th0 - deltaTh, 0]), 180, thStep)
         else:
             theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
 
@@ -229,7 +236,6 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
         corrMax = np.max(corrTheta)
 
         rings = corrMax > thres
-
         return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
 
 
@@ -344,15 +350,17 @@ class Grid:
         self.vb.addItem(self.rect)
         self.lines.append(self.rect)
 
+        step = np.array(shape)/self.n
+
         for i in np.arange(0, self.n[0] - 1):
-            cx = (shape[0]/self.n[0])*(i + 1)
+            cx = step[0]*(i + 1)
             line = QtGui.QGraphicsLineItem(cx, 0, cx, shape[1])
             line.setPen(pen)
             self.vb.addItem(line)
             self.lines.append(line)
 
         for i in np.arange(0, self.n[1] - 1):
-            cy = (shape[1]/self.n[1])*(i + 1)
+            cy = step[1]*(i + 1)
             line = QtGui.QGraphicsLineItem(0, cy, shape[0], cy)
             line.setPen(pen)
             self.vb.addItem(line)

@@ -183,6 +183,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputImgHist = pg.HistogramLUTItem()
         self.inputImgHist.gradient.loadPreset('thermal')
         self.inputImgHist.setImageItem(self.inputImg)
+        self.inputImgHist.vb.setLimits(yMin=0, yMax=20000)
         self.addItem(self.inputImgHist, row=0, col=1)
 
         # subimg
@@ -253,8 +254,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputVb.addItem(self.roi)
 
         # We need 1um n-sized subimages
-        subimgPxSize = 1000/self.pxSize
-        self.n = (np.array(self.shape)/subimgPxSize).astype(int)
+        self.subimgPxSize = 1000/self.pxSize
+        self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
         self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
         self.inputVb.setLimits(xMin=-0.05*self.shape[0],
@@ -269,6 +270,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.dataStd = np.std(self.inputData)
 
     def loadSTED(self, filename=None):
+        self.main.sigmaEdit.setText('60')
         self.loadImage(np.float(self.main.STEDPxEdit.text()),
                        filename=filename)
 
@@ -276,8 +278,9 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those borders before running the analysis.
-        nExcluded = np.float(self.excludedEdit.text())
-        mag = np.float(self.magnificationEdit.text())
+        nExcluded = np.float(self.main.excludedEdit.text())
+        mag = np.float(self.main.magnificationEdit.text())
+        self.main.sigmaEdit.setText('200')
         self.loadImage(np.float(self.main.STORMPxEdit.text()),
                        crop=nExcluded*mag, filename=filename)
 
@@ -296,7 +299,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def updateROI(self):
         self.roiSize = np.float(self.main.roiSizeEdit.text()) / self.pxSize
         self.roi.setSize(self.roiSize, self.roiSize)
-        self.roi.step = self.main.subImgSize/self.pxSize
+        self.roi.step = int(self.shape[0]/self.n[0])
 
     def corrMethodGUI(self):
 
@@ -315,7 +318,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         output = tools.corrMethod(self.selected, *args, developer=True)
         self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
-        if self.th0 is not None:
+        if np.all([self.th0, corrMax]) is not None:
             self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
                                     theta=thetaMax, phase=phaseMax,
                                     b=sinPow).data
@@ -324,7 +327,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             # plot the threshold of correlation chosen by the user
             # phase steps are set to 20, TO DO: explore this parameter
-            theta = np.arange(0, 180, thStep)
+            theta = np.arange(np.min([self.th0 - deltaTh, 0]), 180, thStep)
             pen1 = pg.mkPen(color=(0, 255, 100), width=2,
                             style=QtCore.Qt.SolidLine, antialias=True)
             pen2 = pg.mkPen(color=(255, 50, 60), width=1,
@@ -334,14 +337,13 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             # plot the area given by the direction (meanAngle) and the deltaTh
             if self.th0 is not None:
-                thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh,
-                                      dtype=int)
-                if np.any(thetaArea < 0):
+                thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh)
+                if self.th0 < 0:
                     thetaArea += 180
                 self.pCorr.plot(thetaArea, 0.3*np.ones(len(thetaArea)),
                                 fillLevel=0, brush=(50, 50, 200, 100))
 
-        if rings:
+        if rings and np.abs(self.th0 - thetaMax) <= deltaTh:
             self.main.resultLabel.setText('<strong>¡HAY ANILLOS!<\strong>')
         else:
             self.main.resultLabel.setText('<strong>NO HAY ANILLOS<\strong>')
