@@ -24,13 +24,21 @@ class Gollum(QtGui.QMainWindow):
 
         self.i = 0
 
-        # number of subimg (side)
-        self.subimgNum = 10
-
         self.setWindowTitle('Gollum: the Ring Finder')
 
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
+
+        menubar = self.menuBar()
+        fileMenu = menubar.addMenu('&Run')
+        batchAction = QtGui.QAction('Analyse batch of images...', self)
+        batchAction.triggered.connect(self.batch)
+
+        exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)
+        exitAction.setShortcut('Ctrl+Q')
+        exitAction.setStatusTip('Exit application')
+        exitAction.triggered.connect(QtGui.QApplication.closeAllWindows)
+        fileMenu.addAction(exitAction)
 
         # Main Widgets' layout
         self.mainLayout = QtGui.QGridLayout()
@@ -53,11 +61,11 @@ class Gollum(QtGui.QMainWindow):
         self.inputVb.setAspectLocked(True)
         self.inputVb.addItem(self.inputImgItem)
 
-        inputImgHist = pg.HistogramLUTItem()
-        inputImgHist.gradient.loadPreset('thermal')
-        inputImgHist.setImageItem(self.inputImgItem)
-        inputImgHist.vb.setLimits(yMin=0, yMax=20000)
-        self.inputWidget.addItem(inputImgHist)
+        self.inputImgHist = pg.HistogramLUTItem()
+        self.inputImgHist.gradient.loadPreset('thermal')
+        self.inputImgHist.setImageItem(self.inputImgItem)
+        self.inputImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.inputWidget.addItem(self.inputImgHist)
 
         self.outputImg = pg.ImageItem()
         self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
@@ -101,19 +109,20 @@ class Gollum(QtGui.QMainWindow):
         loadFrame.setFixedHeight(200)
 
         # Ring finding method settings frame
-        self.corrButton = QtGui.QPushButton('Correlation')
-        self.deltaAngleEdit = QtGui.QLineEdit('30')
-        self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.fftThrEdit = QtGui.QLineEdit('0.6')
+        self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
+        self.intThrEdit = QtGui.QLineEdit('3')
         gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
         self.sigmaEdit = QtGui.QLineEdit('60')
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
-        self.corr2thrEdit = QtGui.QLineEdit('0.1')
+        self.corr2thrEdit = QtGui.QLineEdit('0.07')
+        self.thetaStepEdit = QtGui.QLineEdit('3')
+        self.deltaAngleEdit = QtGui.QLineEdit('20')
         powLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.sinPowerEdit = QtGui.QLineEdit('2')
+        self.sinPowerEdit = QtGui.QLineEdit('3')
         wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
+        self.corrButton = QtGui.QPushButton('Correlation')
         settingsFrame = QtGui.QFrame(self)
         settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
         settingsLayout = QtGui.QGridLayout()
@@ -121,22 +130,24 @@ class Gollum(QtGui.QMainWindow):
         settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
         settingsLayout.addWidget(settingsTitle, 0, 0)
-        settingsLayout.addWidget(gaussianSigmaLabel, 1, 0)
-        settingsLayout.addWidget(self.sigmaEdit, 1, 1)
-        settingsLayout.addWidget(minLenLabel, 2, 0)
-        settingsLayout.addWidget(self.lineLengthEdit, 2, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 3, 0)
-        settingsLayout.addWidget(self.corr2thrEdit, 3, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 4, 0)
-        settingsLayout.addWidget(self.thetaStepEdit, 4, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 5, 0)
-        settingsLayout.addWidget(self.deltaAngleEdit, 5, 1)
-        settingsLayout.addWidget(powLabel, 6, 0)
-        settingsLayout.addWidget(self.sinPowerEdit, 6, 1)
-        settingsLayout.addWidget(wvlenLabel, 7, 0)
-        settingsLayout.addWidget(self.wvlenEdit, 7, 1)
-        settingsLayout.addWidget(self.corrButton, 8, 0, 1, 2)
-        settingsFrame.setFixedHeight(260)
+        settingsLayout.addWidget(self.intThrLabel, 1, 0)
+        settingsLayout.addWidget(self.intThrEdit, 1, 1)
+        settingsLayout.addWidget(gaussianSigmaLabel, 2, 0)
+        settingsLayout.addWidget(self.sigmaEdit, 2, 1)
+        settingsLayout.addWidget(minLenLabel, 3, 0)
+        settingsLayout.addWidget(self.lineLengthEdit, 3, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 4, 0)
+        settingsLayout.addWidget(self.corr2thrEdit, 4, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 5, 0)
+        settingsLayout.addWidget(self.thetaStepEdit, 5, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 6, 0)
+        settingsLayout.addWidget(self.deltaAngleEdit, 6, 1)
+        settingsLayout.addWidget(powLabel, 7, 0)
+        settingsLayout.addWidget(self.sinPowerEdit, 7, 1)
+        settingsLayout.addWidget(wvlenLabel, 8, 0)
+        settingsLayout.addWidget(self.wvlenEdit, 8, 1)
+        settingsLayout.addWidget(self.corrButton, 9, 0, 1, 2)
+        settingsFrame.setFixedHeight(280)
 
         buttonsLayout = QtGui.QGridLayout()
         self.buttonWidget.setLayout(buttonsLayout)
@@ -149,12 +160,15 @@ class Gollum(QtGui.QMainWindow):
         self.corrButton.clicked.connect(self.ringFinder)
 
         # Load sample STED image
-        self.loadSTED(os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
-                                   'spectrin1.tif'))
+        self.initialdir = os.getcwd()
+        self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
+                                   'ringfinder', 'spectrin1.tif'))
 
     def loadSTED(self, filename=None):
-        self.loadImage(np.float(self.STEDPxEdit.text()),
-                       filename=filename)
+        load = self.loadImage(np.float(self.STEDPxEdit.text()),
+                              filename=filename)
+        if load:
+            self.sigmaEdit.setText('60')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -162,41 +176,52 @@ class Gollum(QtGui.QMainWindow):
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.excludedEdit.text())
         mag = np.float(self.magnificationEdit.text())
-        self.loadImage(np.float(self.STORMPxEdit.text()), crop=nExcluded*mag,
-                       filename=filename)
+        load = self.loadImage(np.float(self.STORMPxEdit.text()),
+                              crop=nExcluded*mag, filename=filename)
+        if load:
+            self.sigmaEdit.setText('200')
+            self.inputImgHist.setLevels(0, 1)
 
     def loadImage(self, pxSize, crop=0, filename=None):
 
-        self.pxSize = pxSize
-
-        self.inputVb.clear()
-
         if not(isinstance(filename, str)):
             self.filename = utils.getFilename("Load image",
-                                              [('Tiff file', '.tif')])
+                                              [('Tiff file', '.tif')],
+                                              self.initialdir)
         else:
             self.filename = filename
 
-        self.inputData = np.array(Image.open(self.filename))
-        self.shape = self.inputData.shape
-        self.inputData = self.inputData[crop:self.shape[0] - crop,
-                                        crop:self.shape[1] - crop]
-        self.shape = self.inputData.shape
-        self.inputVb.addItem(self.inputImgItem)
-        self.inputImgItem.setImage(self.inputData)
+        if self.filename is not None:
 
-        # We need 1um n-sized subimages
-        subimgPxSize = 1000/self.pxSize
-        self.n = (np.array(self.shape)/subimgPxSize).astype(int)
-        self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+            self.initialdir = os.path.split(self.filename)[0]
+            self.pxSize = pxSize
+            self.inputVb.clear()
 
-        self.inputVb.setLimits(xMin=-0.05*self.shape[0],
-                               xMax=1.05*self.shape[0], minXRange=4,
-                               yMin=-0.05*self.shape[1],
-                               yMax=1.05*self.shape[1], minYRange=4)
+            self.inputData = np.array(Image.open(self.filename))
+            self.shape = self.inputData.shape
+            self.inputData = self.inputData[crop:self.shape[0] - crop,
+                                            crop:self.shape[1] - crop]
+            self.shape = self.inputData.shape
+            self.inputVb.addItem(self.inputImgItem)
+            self.inputImgItem.setImage(self.inputData)
 
-        self.dataMean = np.mean(self.inputData)
-        self.dataStd = np.std(self.inputData)
+            # We need 1um n-sized subimages
+            subimgPxSize = 1000/self.pxSize
+            self.n = (np.array(self.shape)/subimgPxSize).astype(int)
+            self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+
+            self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                                   xMax=1.05*self.shape[0], minXRange=4,
+                                   yMin=-0.05*self.shape[1],
+                                   yMax=1.05*self.shape[1], minYRange=4)
+
+            self.dataMean = np.mean(self.inputData)
+            self.dataStd = np.std(self.inputData)
+
+            return True
+
+        else:
+            return False
 
     def ringFinder(self):
         """RingFinder handles the input data, and then evaluates every subimg
@@ -208,17 +233,17 @@ class Gollum(QtGui.QMainWindow):
         self.outputResult.clear()
 
         # m is such that the image has m x m subimages
-        m = self.subimgNum
+        m = self.n
 
         # shape the data into the subimg that we need for the analysis
         mean = np.mean(self.inputData)
         std = np.std(self.inputData)
         self.blocksInput = tools.blockshaped(self.inputData,
-                                             self.inputData.shape[0]/m,
-                                             self.inputData.shape[0]/m)
+                                             self.inputData.shape[0]/m[0],
+                                             self.inputData.shape[1]/m[1])
 
         # initialize the matrix for storing the ring detection in each subimg
-        M = np.zeros(m**2, dtype=bool)
+        M = np.zeros(m[0]*m[1], dtype=bool)
         nBlocks = np.shape(self.blocksInput)[0]
         self.localCorr = np.zeros(nBlocks)
 
@@ -226,12 +251,14 @@ class Gollum(QtGui.QMainWindow):
         minLen = np.float(self.lineLengthEdit.text())/self.pxSize
         wvlen = np.float(self.wvlenEdit.text())/self.pxSize
         sigma = np.float(self.sigmaEdit.text())/self.pxSize
-        for i in np.arange(nBlocks):
 
+        for i in np.arange(nBlocks):
+            rings = False
             block = self.blocksInput[i, :, :]
 
             # First discrimination for signal level.
-            if np.any(block > mean + 3*std):
+            thr = np.float(self.intThrEdit.text())
+            if np.any(block > mean + thr*std):
                 args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
                         np.float(self.thetaStepEdit.text()),
                         np.float(self.deltaAngleEdit.text()), wvlen,
@@ -241,16 +268,16 @@ class Gollum(QtGui.QMainWindow):
 
                 # Store results
                 self.localCorr[i] = corrMax
-                M[i] = rings
 
             else:
-                self.localCorr[i] = 0
-                M[i] = False
+                self.localCorr[i] = None
+
+            M[i] = rings
 
         # code for visualization of the output
-        M1 = M.reshape(m, m)
-        self.outputData = np.kron(M1, np.ones((self.inputData.shape[0]/m,
-                                               self.inputData.shape[0]/m)))
+        M1 = M.reshape(*m)
+        self.outputData = np.kron(M1, np.ones((self.inputData.shape[0]/m[0],
+                                               self.inputData.shape[0]/m[1])))
         self.outputImg.setImage(self.inputData)
         self.outputResult.setImage(self.outputData)
         self.outputResult.setZValue(10)  # make sure this image is on top
@@ -267,7 +294,7 @@ class Gollum(QtGui.QMainWindow):
 #        plt.ylabel("Frequency")
 #
         plt.figure()
-        data = np.array(self.localCorr).reshape(m, m)
+        data = np.array(self.localCorr).reshape(*m)
         data = np.rot90(data)
         data = np.flipud(data)
         heatmap = plt.pcolor(data)
@@ -282,11 +309,14 @@ class Gollum(QtGui.QMainWindow):
 
         plt.show()
 
+    def batch(self):
+        filenames = utils.getFilenames("Load images", [('Tiff file', '.tif')])
+#        for filename in filenames:
+
+
 
 if __name__ == '__main__':
-
     app = QtGui.QApplication([])
-
     win = Gollum()
     win.show()
     app.exec_()

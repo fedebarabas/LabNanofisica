@@ -112,22 +112,29 @@ def getDirection(data, sigma, minLen, debug=False):
     print('sigma1', sigmaTh)
 
     try:
-        # if the std is too high it's probably the case of flat angles,
-        # i.e., 181, -2, 0.3, -1, 179
-        # TO DO: find optimal threshold, 20 is arbitrary
-        if sigmaTh > 20:
-            if debug:
-                print('sigmaTh too high, will rotate data and try again')
-            th0, sigmaTh, lines = linesFromBinary(np.rot90(binary), minLen)
-            print('sigma2', sigmaTh)
-            if sigmaTh < 20:
+
+        if len(lines) > 1:
+
+            # if the std is too high it's probably the case of flat angles,
+            # i.e., 181, -2, 0.3, -1, 179
+            # TO DO: find optimal threshold, 20 is arbitrary
+            if sigmaTh > 20:
                 if debug:
-                    print('sigmaTh too high in both directions')
-                return th0 - 90, lines
+                    print('sigmaTh too high, will rotate data and try again')
+                th0, sigmaTh, lines = linesFromBinary(np.rot90(binary), minLen)
+                print('sigma2', sigmaTh)
+                if sigmaTh < 20:
+                    return th0 - 90, lines
+                else:
+                    if debug:
+                        print('sigmaTh too high in both directions')
+                    return None, lines
             else:
-                return None, lines
+                return th0, lines
         else:
-            return th0, lines
+            if debug:
+                print('Only one line found')
+            return None, lines
 
     except:
         # if sigmaTh is None (no lines), this happens
@@ -230,10 +237,13 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
             corrPhaseArg[t - 1] = .025*np.argmax(corrPhase)
 
         # get theta, phase and correlation with greatest correlation value
-        i = np.argmax(corrTheta)
-        thetaMax = theta[i]
-        phaseMax = corrPhaseArg[i]
-        corrMax = np.max(corrTheta)
+        # Find indices within (th0 - deltaTh, th0 + deltaTh)
+        ix = np.where(np.logical_and(th0 - deltaTh <= theta,
+                                     theta <= th0 + deltaTh))
+        i = np.argmax(corrTheta[ix])
+        thetaMax = theta[ix][i]
+        phaseMax = corrPhaseArg[ix][i]
+        corrMax = np.max(corrTheta[ix])
 
         rings = corrMax > thres
         return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
@@ -343,8 +353,8 @@ class Grid:
         self.n = n
         self.lines = []
 
-        pen = pg.mkPen(color=(255, 255, 0), width=1,
-                       style=QtCore.Qt.SolidLine, antialias=True)
+        pen = pg.mkPen(color=(255, 255, 0), width=1, style=QtCore.Qt.DotLine,
+                       antialias=True)
         self.rect = QtGui.QGraphicsRectItem(0, 0, shape[0], shape[1])
         self.rect.setPen(pen)
         self.vb.addItem(self.rect)

@@ -61,9 +61,9 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadFrame.setFixedHeight(200)
 
         # Ring finding method settings
-        self.corrThresEdit = QtGui.QLineEdit('0.1')
+        self.corrThresEdit = QtGui.QLineEdit('0.07')
         self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.deltaThEdit = QtGui.QLineEdit('30')
+        self.deltaThEdit = QtGui.QLineEdit('20')
         self.sinPowerEdit = QtGui.QLineEdit('3')
         self.loadimageButton = QtGui.QPushButton('Load Image')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
@@ -139,8 +139,6 @@ class GollumDeveloper(QtGui.QMainWindow):
         layout.addWidget(self.imageWidget, 0, 1)
         layout.setColumnMinimumWidth(1, 1000)
         layout.setRowMinimumHeight(0, 850)
-        self.move(QtGui.QApplication.desktop().screen().rect().center() -
-                  self.rect().center())
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
         self.loadSTORMButton.clicked.connect(self.imageWidget.loadSTORM)
@@ -203,8 +201,9 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.roi.setZValue(10)  # make sure ROI is drawn above image
 
         # Load sample STED image
-        self.loadSTED(os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder',
-                                   'spectrin1.tif'))
+        self.initialdir = os.getcwd()
+        self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
+                                   'ringfinder', 'spectrin1.tif'))
 
         # Correlation
         self.pCorr = pg.PlotItem(title="Correlation")
@@ -230,49 +229,58 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
     def loadImage(self, pxSize, crop=0, filename=None):
 
-        self.pxSize = pxSize
-
-        self.inputVb.clear()
-
         if not(isinstance(filename, str)):
             self.filename = utils.getFilename("Load image",
-                                              [('Tiff file', '.tif')])
+                                              [('Tiff file', '.tif')],
+                                              self.initialdir)
         else:
             self.filename = filename
 
-        self.inputData = np.array(Image.open(self.filename))
-        self.shape = self.inputData.shape
-        self.inputData = self.inputData[crop:self.shape[0] - crop,
-                                        crop:self.shape[1] - crop]
-        self.shape = self.inputData.shape
-        self.inputImg = pg.ImageItem()
-        self.inputVb.addItem(self.inputImg)
-        self.inputVb.setAspectLocked(True)
-        self.inputImg.setImage(self.inputData)
-        self.inputImgHist.setImageItem(self.inputImg)
-        self.addItem(self.inputImgHist, row=0, col=1)
-        self.inputVb.addItem(self.roi)
+        if self.filename is not None:
 
-        # We need 1um n-sized subimages
-        self.subimgPxSize = 1000/self.pxSize
-        self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
-        self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+            self.initialdir = os.path.split(self.filename)[0]
+            self.pxSize = pxSize
+            self.inputVb.clear()
 
-        self.inputVb.setLimits(xMin=-0.05*self.shape[0],
-                               xMax=1.05*self.shape[0], minXRange=4,
-                               yMin=-0.05*self.shape[1],
-                               yMax=1.05*self.shape[1], minYRange=4)
+            self.inputData = np.array(Image.open(self.filename))
+            self.shape = self.inputData.shape
+            self.inputData = self.inputData[crop:self.shape[0] - crop,
+                                            crop:self.shape[1] - crop]
+            self.shape = self.inputData.shape
+            self.inputImg = pg.ImageItem()
+            self.inputVb.addItem(self.inputImg)
+            self.inputVb.setAspectLocked(True)
+            self.inputImg.setImage(self.inputData)
+            self.inputImgHist.setImageItem(self.inputImg)
+            self.addItem(self.inputImgHist, row=0, col=1)
+            self.inputVb.addItem(self.roi)
 
-        self.updateROI()
-        self.updatePlot()
+            # We need n 1um-sized subimages
+            self.subimgPxSize = float(self.main.roiSizeEdit.text())/self.pxSize
+            self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
+            self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
-        self.dataMean = np.mean(self.inputData)
-        self.dataStd = np.std(self.inputData)
+            self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                                   xMax=1.05*self.shape[0], minXRange=4,
+                                   yMin=-0.05*self.shape[1],
+                                   yMax=1.05*self.shape[1], minYRange=4)
+
+            self.updateROI()
+            self.updatePlot()
+
+            self.dataMean = np.mean(self.inputData)
+            self.dataStd = np.std(self.inputData)
+
+            return True
+
+        else:
+            return False
 
     def loadSTED(self, filename=None):
-        self.main.sigmaEdit.setText('60')
-        self.loadImage(np.float(self.main.STEDPxEdit.text()),
-                       filename=filename)
+        load = self.loadImage(np.float(self.main.STEDPxEdit.text()),
+                              filename=filename)
+        if load:
+            self.main.sigmaEdit.setText('60')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -280,9 +288,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.main.excludedEdit.text())
         mag = np.float(self.main.magnificationEdit.text())
-        self.main.sigmaEdit.setText('200')
-        self.loadImage(np.float(self.main.STORMPxEdit.text()),
-                       crop=nExcluded*mag, filename=filename)
+        load = self.loadImage(np.float(self.main.STORMPxEdit.text()),
+                              crop=nExcluded*mag, filename=filename)
+        if load:
+            self.main.sigmaEdit.setText('200')
+            self.inputImgHist.setLevels(0, 1)
 
     def updatePlot(self):
         self.selected = self.roi.getArrayRegion(self.inputData, self.inputImg)
@@ -305,48 +315,59 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.pCorr.clear()
 
-        # for every subimg, we apply the correlation method for
-        # ring finding
-        corrThres = np.float(self.main.corrThresEdit.text())
-        sigma = np.float(self.main.sigmaEdit.text()) / self.pxSize
-        minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
-        thStep = np.float(self.main.thetaStepEdit.text())
-        deltaTh = np.float(self.main.deltaThEdit.text())
-        wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
-        sinPow = np.float(self.main.sinPowerEdit.text())
-        args = [corrThres, sigma, minLen, thStep, deltaTh, wvlen, sinPow]
-        output = tools.corrMethod(self.selected, *args, developer=True)
-        self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
+        thr = np.float(self.main.intThrEdit.text())
+        if np.any(self.selected > self.dataMean + thr*self.dataStd):
 
-        if np.all([self.th0, corrMax]) is not None:
-            self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
-                                    theta=thetaMax, phase=phaseMax,
-                                    b=sinPow).data
-            self.img1.setImage(self.bestAxon)
-            self.img2.setImage(self.selected)
+            self.getDirection()
 
-            # plot the threshold of correlation chosen by the user
-            # phase steps are set to 20, TO DO: explore this parameter
-            theta = np.arange(np.min([self.th0 - deltaTh, 0]), 180, thStep)
-            pen1 = pg.mkPen(color=(0, 255, 100), width=2,
-                            style=QtCore.Qt.SolidLine, antialias=True)
-            pen2 = pg.mkPen(color=(255, 50, 60), width=1,
-                            style=QtCore.Qt.SolidLine, antialias=True)
-            self.pCorr.plot(theta, corrTheta, pen=pen1)
-            self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)), pen=pen2)
+            # for every subimg, we apply the correlation method for
+            # ring finding
+            corrThres = np.float(self.main.corrThresEdit.text())
+            sigma = np.float(self.main.sigmaEdit.text()) / self.pxSize
+            minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
+            thStep = np.float(self.main.thetaStepEdit.text())
+            deltaTh = np.float(self.main.deltaThEdit.text())
+            wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
+            sinPow = np.float(self.main.sinPowerEdit.text())
+            args = [corrThres, sigma, minLen, thStep, deltaTh, wvlen, sinPow]
+            output = tools.corrMethod(self.selected, *args, developer=True)
+            self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
-            # plot the area given by the direction (meanAngle) and the deltaTh
-            if self.th0 is not None:
-                thetaArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh)
-                if self.th0 < 0:
-                    thetaArea += 180
-                self.pCorr.plot(thetaArea, 0.3*np.ones(len(thetaArea)),
-                                fillLevel=0, brush=(50, 50, 200, 100))
+            if np.all([self.th0, corrMax]) is not None:
+                self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
+                                        theta=thetaMax, phase=phaseMax,
+                                        b=sinPow).data
+                self.img1.setImage(self.bestAxon)
+                self.img2.setImage(self.selected)
 
-        if rings and np.abs(self.th0 - thetaMax) <= deltaTh:
-            self.main.resultLabel.setText('<strong>¡HAY ANILLOS!<\strong>')
+                # plot the threshold of correlation chosen by the user
+                # phase steps are set to 20, TO DO: explore this parameter
+                theta = np.arange(np.min([self.th0 - deltaTh, 0]), 180, thStep)
+                pen1 = pg.mkPen(color=(0, 255, 100), width=2,
+                                style=QtCore.Qt.SolidLine, antialias=True)
+                pen2 = pg.mkPen(color=(255, 50, 60), width=1,
+                                style=QtCore.Qt.SolidLine, antialias=True)
+                self.pCorr.plot(theta, corrTheta, pen=pen1)
+                self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)),
+                                pen=pen2)
+
+                # plot the area within deltaTh from the found direction
+                if self.th0 is not None:
+                    thArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh)
+                    if self.th0 < 0:
+                        thArea += 180
+                    self.pCorr.plot(thArea, 0.2*np.ones(len(thArea)),
+                                    fillLevel=0, brush=(50, 50, 200, 100))
+
+            if rings and np.abs(self.th0 - thetaMax) <= deltaTh:
+                self.main.resultLabel.setText('<strong>MY PRECIOUS!<\strong>')
+            else:
+                if rings:
+                    print('Correlation maximum outside direction theta range')
+                self.main.resultLabel.setText('<strong>No rings<\strong>')
         else:
-            self.main.resultLabel.setText('<strong>NO HAY ANILLOS<\strong>')
+            print('Data below intensity threshold')
+            self.main.resultLabel.setText('<strong>No rings<\strong>')
 
     def intThreshold(self):
         thr = np.float(self.main.intThrEdit.text())
@@ -364,8 +385,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         thresh = filters.threshold_otsu(img)
         binary = img > thresh
 
-        self.inputData *= binary
-        self.inputImg.setImage(self.inputData)
+        self.inputImg.setImage(self.inputData * binary)
 
     def getDirection(self):
 
@@ -386,9 +406,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.subImgPlot.plot((p0[1], p1[1]), (p0[0], p1[0]), pen=pen)
 
 if __name__ == '__main__':
-
     app = QtGui.QApplication([])
-
     win = GollumDeveloper()
     win.show()
     app.exec_()
