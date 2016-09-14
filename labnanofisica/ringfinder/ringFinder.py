@@ -7,6 +7,8 @@ Created on Fri Jul 15 12:25:40 2016
 
 import os
 import numpy as np
+import scipy.ndimage
+import tifffile as tiff
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -31,8 +33,16 @@ class Gollum(QtGui.QMainWindow):
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&Run')
-        batchAction = QtGui.QAction('Analyse batch of images...', self)
-        batchAction.triggered.connect(self.batch)
+        batchSTORMAction = QtGui.QAction('Analyse batch of STORM images...',
+                                         self)
+        batchSTEDAction = QtGui.QAction('Analyse batch of STED images...',
+                                        self)
+
+        batchSTORMAction.triggered.connect(self.batchSTORM)
+        batchSTEDAction.triggered.connect(self.batchSTED)
+        fileMenu.addAction(batchSTORMAction)
+        fileMenu.addAction(batchSTEDAction)
+        fileMenu.addSeparator()
 
         exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)
         exitAction.setShortcut('Ctrl+Q')
@@ -180,50 +190,56 @@ class Gollum(QtGui.QMainWindow):
                               crop=nExcluded*mag, filename=filename)
         if load:
             self.sigmaEdit.setText('200')
-            self.inputImgHist.setLevels(0, 1)
+            self.inputImgHist.setLevels(0, 0.3)
 
     def loadImage(self, pxSize, crop=0, filename=None):
 
-        if not(isinstance(filename, str)):
-            self.filename = utils.getFilename("Load image",
-                                              [('Tiff file', '.tif')],
-                                              self.initialdir)
-        else:
-            self.filename = filename
+        try:
+            if not(isinstance(filename, str)):
+                self.filename = utils.getFilename("Load image",
+                                                  [('Tiff file', '.tif')],
+                                                  self.initialdir)
+            else:
+                self.filename = filename
 
-        if self.filename is not None:
+            if self.filename is not None:
 
-            self.initialdir = os.path.split(self.filename)[0]
-            self.pxSize = pxSize
-            self.inputVb.clear()
+                self.initialdir = os.path.split(self.filename)[0]
+                self.crop = crop
+                self.pxSize = pxSize
+                self.inputVb.clear()
 
-            self.inputData = np.array(Image.open(self.filename))
-            self.shape = self.inputData.shape
-            self.inputData = self.inputData[crop:self.shape[0] - crop,
-                                            crop:self.shape[1] - crop]
-            self.shape = self.inputData.shape
-            self.inputVb.addItem(self.inputImgItem)
-            self.inputImgItem.setImage(self.inputData)
+                self.inputData = np.array(Image.open(self.filename))
+                self.initShape = self.inputData.shape
+                self.inputData = self.inputData[crop:self.initShape[0] - crop,
+                                                crop:self.initShape[1] - crop]
+                self.shape = self.inputData.shape
+                self.inputVb.addItem(self.inputImgItem)
+                showIm = np.fliplr(np.transpose(self.inputData))
+                self.inputImgItem.setImage(showIm)
 
-            # We need 1um n-sized subimages
-            subimgPxSize = 1000/self.pxSize
-            self.n = (np.array(self.shape)/subimgPxSize).astype(int)
-            self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+                # We need 1um n-sized subimages
+                self.subimgPxSize = 1000/self.pxSize
+                self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
+                self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
-            self.inputVb.setLimits(xMin=-0.05*self.shape[0],
-                                   xMax=1.05*self.shape[0], minXRange=4,
-                                   yMin=-0.05*self.shape[1],
-                                   yMax=1.05*self.shape[1], minYRange=4)
+                self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                                       xMax=1.05*self.shape[0], minXRange=4,
+                                       yMin=-0.05*self.shape[1],
+                                       yMax=1.05*self.shape[1], minYRange=4)
 
-            self.dataMean = np.mean(self.inputData)
-            self.dataStd = np.std(self.inputData)
+                self.dataMean = np.mean(self.inputData)
+                self.dataStd = np.std(self.inputData)
 
-            return True
+                return True
 
-        else:
-            return False
+            else:
+                return False
 
-    def ringFinder(self):
+        except OSError:
+            print("No file selected!")
+
+    def ringFinder(self, show=True):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
@@ -278,13 +294,19 @@ class Gollum(QtGui.QMainWindow):
         M1 = M.reshape(*m)
         self.outputData = np.kron(M1, np.ones((self.inputData.shape[0]/m[0],
                                                self.inputData.shape[0]/m[1])))
-        self.outputImg.setImage(self.inputData)
-        self.outputResult.setImage(self.outputData)
+        showIm = np.fliplr(np.transpose(self.inputData))
+        self.outputImg.setImage(showIm)
+        showIm = np.fliplr(np.transpose(self.outputData))
+        self.outputResult.setImage(showIm)
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
 
-#        self.setGrid(self.outputVb,n=10)
-#
+        self.outputVb.setLimits(xMin=-0.05*self.shape[0],
+                                xMax=1.05*self.shape[0], minXRange=4,
+                                yMin=-0.05*self.shape[1],
+                                yMax=1.05*self.shape[1], minYRange=4)
+        tools.Grid(self.outputVb, self.shape, self.n)
+
 #        # plot histogram of the correlation values
 #        plt.figure(0)
 #        plt.subplot()
@@ -292,28 +314,81 @@ class Gollum(QtGui.QMainWindow):
 #        plt.title("Correlations Histogram")
 #        plt.xlabel("Value")
 #        plt.ylabel("Frequency")
+
+        if show:
+            plt.figure()
+            data = self.localCorr.reshape(*m)
+            data = np.rot90(data)
+            data = np.flipud(data)
+            heatmap = plt.pcolor(data)
+
+            for y in range(data.shape[0]):
+                for x in range(data.shape[1]):
+                    plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
+                             horizontalalignment='center',
+                             verticalalignment='center',)
+
+            plt.colorbar(heatmap)
+
+            plt.show()
+
+    def batch(self, function):
+        try:
+            filenames = utils.getFilenames("Load images",
+                                           [('Tiff file', '.tif')],
+                                           self.initialdir)
+            nfiles = len(filenames)
+            function(filenames[0])
+            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+            for i in np.arange(len(filenames)):
+                self.loadSTORM(filenames[i])
+                self.ringFinder(False)
+                corr = self.localCorr.reshape(*self.n)
+                corrArray[i] = corr
+                corrName = utils.insertSuffix(filenames[i], '_correlation')
+                print(corr.shape, self.shape/self.n)
+                corr = scipy.ndimage.zoom(corr, self.shape/self.n, order=0)
+                im = np.ones(self.initShape)
+                print('crop', self.crop)
+                print(self.shape, im.shape)
+                print(self.initShape)
+                print(corr.shape)
+                im[self.crop:self.initShape[0] - self.crop,
+                   self.crop:self.initShape[1] - self.crop] = 1000*corr
+                tiff.imsave(corrName, im.astype(np.uint16),
+                            software='Tormenta', imagej=True,
+                            resolution=(0.001/self.pxSize, 0.001/self.pxSize),
+                            metadata={'spacing': 1, 'unit': 'um'})
+
+            # plot histogram of the correlation values
+            plt.figure(0)
+            plt.hist(corrArray)
+            plt.title("Correlations Histogram")
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
+            plt.show()
+
+        except IndexError:
+            print("No file selected!")
+
+    def batchSTORM(self):
+        self.batch(self.loadSTORM)
+
+    def batchSTED(self):
+        self.batch(self.loadSTED)
+
+
+#def chunkFinder(data, args):
 #
-        plt.figure()
-        data = np.array(self.localCorr).reshape(*m)
-        data = np.rot90(data)
-        data = np.flipud(data)
-        heatmap = plt.pcolor(data)
-
-        for y in range(data.shape[0]):
-            for x in range(data.shape[1]):
-                plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
-                         horizontalalignment='center',
-                         verticalalignment='center',)
-
-        plt.colorbar(heatmap)
-
-        plt.show()
-
-    def batch(self):
-        filenames = utils.getFilenames("Load images", [('Tiff file', '.tif')])
-#        for filename in filenames:
-
-
+#    thr, mean, std, corr2thr, sigma, minLen, thetaStep = args
+#
+#    if np.any(block > mean + thr*std):
+#                args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
+#                        np.float(self.thetaStepEdit.text()),
+#                        np.float(self.deltaAngleEdit.text()), wvlen,
+#                        np.float(self.sinPowerEdit.text())]
+#                output = tools.corrMethod(block, *args)
+#                angle, corrTheta, corrMax, theta, phase, rings = output
 
 if __name__ == '__main__':
     app = QtGui.QApplication([])

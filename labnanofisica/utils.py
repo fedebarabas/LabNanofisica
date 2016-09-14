@@ -10,27 +10,21 @@ from tkinter import Tk, filedialog
 
 
 def getFilename(title, types, initialdir=None):
-    try:
-        root = Tk()
-        root.withdraw()
-        filename = filedialog.askopenfilename(title=title, filetypes=types,
-                                              initialdir=initialdir)
-        root.destroy()
-        return filename
-    except OSError:
-        print("No file selected!")
+    root = Tk()
+    root.withdraw()
+    filename = filedialog.askopenfilename(title=title, filetypes=types,
+                                          initialdir=initialdir)
+    root.destroy()
+    return filename
 
 
 def getFilenames(title, types=[], initialdir=None):
-    try:
-        root = Tk()
-        root.withdraw()
-        filenames = filedialog.askopenfilenames(title=title, filetypes=types,
-                                                initialdir=initialdir)
-        root.destroy()
-        return root.tk.splitlist(filenames)
-    except OSError:
-        print("No files selected!")
+    root = Tk()
+    root.withdraw()
+    filenames = filedialog.askopenfilenames(title=title, filetypes=types,
+                                            initialdir=initialdir)
+    root.destroy()
+    return root.tk.splitlist(filenames)
 
 
 def insertSuffix(filename, suffix, newExt=None):
