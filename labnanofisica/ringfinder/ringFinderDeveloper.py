@@ -203,7 +203,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # Load sample STED image
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrin1.tif'))
+                                   'ringfinder', 'spectrin.tif'))
 
         # Correlation
         self.pCorr = pg.PlotItem(title="Correlation")

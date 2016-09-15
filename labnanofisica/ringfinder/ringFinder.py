@@ -125,7 +125,7 @@ class Gollum(QtGui.QMainWindow):
         self.sigmaEdit = QtGui.QLineEdit('60')
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
-        self.corr2thrEdit = QtGui.QLineEdit('0.07')
+        self.corr2thrEdit = QtGui.QLineEdit('0.075')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
         powLabel = QtGui.QLabel('Sinusoidal pattern power')
@@ -172,7 +172,7 @@ class Gollum(QtGui.QMainWindow):
         # Load sample STED image
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrin1.tif'))
+                                   'ringfinder', 'spectrin.tif'))
 
     def loadSTED(self, filename=None):
         load = self.loadImage(np.float(self.STEDPxEdit.text()),
@@ -209,7 +209,8 @@ class Gollum(QtGui.QMainWindow):
                 self.pxSize = pxSize
                 self.inputVb.clear()
 
-                self.inputData = np.array(Image.open(self.filename))
+                im = Image.open(self.filename)
+                self.inputData = np.array(im).astype(np.float64)
                 self.initShape = self.inputData.shape
                 self.inputData = self.inputData[crop:self.initShape[0] - crop,
                                                 crop:self.initShape[1] - crop]
@@ -307,14 +308,6 @@ class Gollum(QtGui.QMainWindow):
                                 yMax=1.05*self.shape[1], minYRange=4)
         tools.Grid(self.outputVb, self.shape, self.n)
 
-#        # plot histogram of the correlation values
-#        plt.figure(0)
-#        plt.subplot()
-#        plt.hist(self.localCorr)
-#        plt.title("Correlations Histogram")
-#        plt.xlabel("Value")
-#        plt.ylabel("Frequency")
-
         if show:
             plt.figure()
             data = self.localCorr.reshape(*m)
@@ -340,29 +333,31 @@ class Gollum(QtGui.QMainWindow):
             nfiles = len(filenames)
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+            print('Processing folder ' + os.path.split(filenames[0])[0])
             for i in np.arange(len(filenames)):
-                self.loadSTORM(filenames[i])
+                print(os.path.split(filenames[i])[1])
+                function(filenames[i])
                 self.ringFinder(False)
                 corr = self.localCorr.reshape(*self.n)
                 corrArray[i] = corr
                 corrName = utils.insertSuffix(filenames[i], '_correlation')
-                print(corr.shape, self.shape/self.n)
-                corr = scipy.ndimage.zoom(corr, self.shape/self.n, order=0)
-                im = np.ones(self.initShape)
-                print('crop', self.crop)
-                print(self.shape, im.shape)
-                print(self.initShape)
-                print(corr.shape)
+
+                # Expand correlation array so it matches data shape
+                m = self.shape/self.n
+                corr = np.repeat(np.repeat(corr, m[1], axis=1), m[0], axis=0)
+                im = np.empty(self.initShape, dtype=np.single)
+                im[:] = np.NAN
                 im[self.crop:self.initShape[0] - self.crop,
-                   self.crop:self.initShape[1] - self.crop] = 1000*corr
-                tiff.imsave(corrName, im.astype(np.uint16),
-                            software='Tormenta', imagej=True,
-                            resolution=(0.001/self.pxSize, 0.001/self.pxSize),
+                   self.crop:self.initShape[1] - self.crop] = corr
+
+                tiff.imsave(corrName, im, software='Gollum', imagej=True,
+                            resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
 
             # plot histogram of the correlation values
+            plotData = np.nan_to_num(corrArray.flatten())
             plt.figure(0)
-            plt.hist(corrArray)
+            plt.hist(plotData, bins=30, range=(0.0001, np.max(plotData)))
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
             plt.ylabel("Frequency")

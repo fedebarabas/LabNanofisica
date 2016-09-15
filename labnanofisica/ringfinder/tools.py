@@ -109,8 +109,8 @@ def getDirection(data, sigma, minLen, debug=False):
     thresh = filters.threshold_otsu(img)
     binary = img > thresh
     th0, sigmaTh, lines = linesFromBinary(binary, minLen, debug)
-#    if debug:
-    print('sigma1', sigmaTh)
+    if debug:
+        print('sigma1', sigmaTh)
 
     try:
 
