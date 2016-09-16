@@ -7,7 +7,7 @@ Created on Fri Jul 15 12:25:40 2016
 
 import os
 import numpy as np
-import scipy.ndimage
+from scipy import ndimage as ndi
 import tifffile as tiff
 
 from PIL import Image
@@ -172,7 +172,7 @@ class Gollum(QtGui.QMainWindow):
         # Load sample STED image
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrin.tif'))
+                                   'ringfinder', 'spectrinSTED.tif'))
 
     def loadSTED(self, filename=None):
         load = self.loadImage(np.float(self.STEDPxEdit.text()),
@@ -253,29 +253,36 @@ class Gollum(QtGui.QMainWindow):
         m = self.n
 
         # shape the data into the subimg that we need for the analysis
-        mean = np.mean(self.inputData)
-        std = np.std(self.inputData)
         self.blocksInput = tools.blockshaped(self.inputData,
                                              self.inputData.shape[0]/m[0],
                                              self.inputData.shape[1]/m[1])
 
         # initialize the matrix for storing the ring detection in each subimg
         M = np.zeros(m[0]*m[1], dtype=bool)
-        nBlocks = np.shape(self.blocksInput)[0]
-        self.localCorr = np.zeros(nBlocks)
+        self.localCorr = np.zeros(len(self.blocksInput))
 
         # for every subimg, we apply the correlation method for ring finding
         minLen = np.float(self.lineLengthEdit.text())/self.pxSize
         wvlen = np.float(self.wvlenEdit.text())/self.pxSize
         sigma = np.float(self.sigmaEdit.text())/self.pxSize
 
-        for i in np.arange(nBlocks):
+        # We apply intensity threshold to smoothed data so we don't catch
+        # tiny bright spots outside neurons
+        inputDataS = ndi.gaussian_filter(self.inputData, 300/self.pxSize)
+        meanS = np.mean(inputDataS)
+        stdS = np.std(inputDataS)
+        blocksInputS = tools.blockshaped(inputDataS,
+                                         inputDataS.shape[0]/m[0],
+                                         inputDataS.shape[1]/m[1])
+
+        for i in np.arange(len(self.blocksInput)):
             rings = False
             block = self.blocksInput[i, :, :]
+            blockS = blocksInputS[i, :, :]
 
             # First discrimination for signal level.
             thr = np.float(self.intThrEdit.text())
-            if np.any(block > mean + thr*std):
+            if np.any(blockS > meanS + thr*stdS):
                 args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
                         np.float(self.thetaStepEdit.text()),
                         np.float(self.deltaAngleEdit.text()), wvlen,
@@ -298,6 +305,7 @@ class Gollum(QtGui.QMainWindow):
         showIm = np.fliplr(np.transpose(self.inputData))
         self.outputImg.setImage(showIm)
         showIm = np.fliplr(np.transpose(self.outputData))
+        print(showIm.shape, np.sum(showIm))
         self.outputResult.setImage(showIm)
         self.outputResult.setZValue(10)  # make sure this image is on top
         self.outputResult.setOpacity(0.5)
@@ -373,17 +381,17 @@ class Gollum(QtGui.QMainWindow):
         self.batch(self.loadSTED)
 
 
-#def chunkFinder(data, args):
-#
-#    thr, mean, std, corr2thr, sigma, minLen, thetaStep = args
-#
-#    if np.any(block > mean + thr*std):
-#                args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
-#                        np.float(self.thetaStepEdit.text()),
-#                        np.float(self.deltaAngleEdit.text()), wvlen,
-#                        np.float(self.sinPowerEdit.text())]
-#                output = tools.corrMethod(block, *args)
-#                angle, corrTheta, corrMax, theta, phase, rings = output
+def chunkFinder(data, args):
+
+    data, dataS, thr, meanS, stdS, corr2thr, sigma, minLen, thetaStep = args
+
+    if np.any(block > mean + thr*std):
+        args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
+                np.float(self.thetaStepEdit.text()),
+                np.float(self.deltaAngleEdit.text()), wvlen,
+                np.float(self.sinPowerEdit.text())]
+        output = tools.corrMethod(block, *args)
+        angle, corrTheta, corrMax, theta, phase, rings = output
 
 if __name__ == '__main__':
     app = QtGui.QApplication([])

@@ -72,6 +72,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.dirButton = QtGui.QPushButton('Get direction')
         self.sigmaEdit = QtGui.QLineEdit('60')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
+        self.intThrButton.setCheckable(True)
         self.intThrEdit = QtGui.QLineEdit('3')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
@@ -176,6 +177,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputImg = pg.ImageItem()
         self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
+        self.thresIm = pg.ImageItem()
+        self.inputVb.addItem(self.thresIm)
 
         # Contrast/color control
         self.inputImgHist = pg.HistogramLUTItem()
@@ -203,10 +206,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # Load sample STED image
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrin.tif'))
+                                   'ringfinder', 'spectrinSTED.tif'))
 
         # Correlation
-        self.pCorr = pg.PlotItem(title="Correlation")
+        self.pCorr = pg.PlotItem(title='Correlation')
         self.pCorr.showGrid(x=True, y=True)
         self.addItem(self.pCorr, row=0, col=2)
 
@@ -242,7 +245,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.pxSize = pxSize
             self.inputVb.clear()
 
-            self.inputData = np.array(Image.open(self.filename))
+            im = Image.open(self.filename)
+            self.inputData = np.array(im).astype(np.float64)
             self.shape = self.inputData.shape
             self.inputData = self.inputData[crop:self.shape[0] - crop,
                                             crop:self.shape[1] - crop]
@@ -250,7 +254,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.inputImg = pg.ImageItem()
             self.inputVb.addItem(self.inputImg)
             self.inputVb.setAspectLocked(True)
-            self.inputImg.setImage(self.inputData)
+            showIm = np.fliplr(np.transpose(self.inputData))
+            self.inputImg.setImage(showIm)
             self.inputImgHist.setImageItem(self.inputImg)
             self.addItem(self.inputImgHist, row=0, col=1)
             self.inputVb.addItem(self.roi)
@@ -295,7 +300,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.inputImgHist.setLevels(0, 1)
 
     def updatePlot(self):
-        self.selected = self.roi.getArrayRegion(self.inputData, self.inputImg)
+        inputIm = np.fliplr(np.transpose(self.inputData))
+        self.selected = self.roi.getArrayRegion(inputIm, self.inputImg)
         shape = self.selected.shape
         self.subImgSize = shape[0]
         self.subImgPlot.clear()
@@ -370,11 +376,40 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.main.resultLabel.setText('<strong>No rings<\strong>')
 
     def intThreshold(self):
-        thr = np.float(self.main.intThrEdit.text())
-        if np.any(self.selected > self.dataMean + thr*self.dataStd):
-            print('NEURON')
+
+        if self.main.intThrButton.isChecked():
+
+            # shape the data into the subimg that we need for the analysis
+            subImgPx = np.array(self.inputData.shape)/self.n
+            self.blocksInput = tools.blockshaped(self.inputData, *subImgPx)
+
+            # We apply intensity threshold to smoothed data so we don't catch
+            # tiny bright spots outside neurons
+            inputDataS = ndi.gaussian_filter(self.inputData, 300/self.pxSize)
+            meanS = np.mean(inputDataS)
+            stdS = np.std(inputDataS)
+            blocksInputS = tools.blockshaped(inputDataS,
+                                             inputDataS.shape[0]/self.n[0],
+                                             inputDataS.shape[1]/self.n[1])
+
+            neuron = np.zeros(len(self.blocksInput))
+            thr = np.float(self.main.intThrEdit.text())
+            neuron = [np.any(b > meanS + thr*stdS) for b in blocksInputS]
+
+            # code for visualization of the output
+            neuron = np.array(neuron).reshape(*self.n)
+            neuron = np.repeat(np.repeat(neuron, self.inputData.shape[0]/self.n[0], axis=0), self.inputData.shape[1]/self.n[1], axis=1)
+#            ones = np.ones((self.inputData.shape[0]/self.n[0],
+#                            self.inputData.shape[1]/self.n[1]))
+#            showIm = np.fliplr(np.transpose(np.kron(neuron, ones)))
+            showIm = np.fliplr(np.transpose(neuron))
+            self.thresIm.setImage(100*showIm.astype(float))
+            self.thresIm.setZValue(10)  # make sure this image is on top
+            self.thresIm.setOpacity(0.5)
+#            self.thresIm.setScale(self.inputData.shape[0]/self.n[0])
+
         else:
-            print('BACKGROUND')
+            self.thresIm.clear()
 
     def imageFilter(self):
         ''' Removes background data from image.'''
@@ -384,8 +419,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         thresh = filters.threshold_otsu(img)
         binary = img > thresh
-
-        self.inputImg.setImage(self.inputData * binary)
+        im = np.fliplr(np.transpose(self.inputData * binary))
+        self.inputImg.setImage(im)
 
     def getDirection(self):
 
