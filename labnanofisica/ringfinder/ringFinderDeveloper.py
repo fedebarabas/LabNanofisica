@@ -73,7 +73,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.sigmaEdit = QtGui.QLineEdit('60')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
         self.intThrButton.setCheckable(True)
-        self.intThrEdit = QtGui.QLineEdit('3')
+        self.intThrEdit = QtGui.QLineEdit('0.2')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -179,6 +179,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputVb.setAspectLocked(True)
         self.thresIm = pg.ImageItem()
         self.inputVb.addItem(self.thresIm)
+        self.thresIm.setZValue(20)  # make sure this image is on top
+        self.thresIm.setOpacity(0.5)
 
         # Contrast/color control
         self.inputImgHist = pg.HistogramLUTItem()
@@ -202,6 +204,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.roi = tools.SubImgROI(self.main.subImgSize/pxSize)
         self.inputVb.addItem(self.roi)
         self.roi.setZValue(10)  # make sure ROI is drawn above image
+        self.roi.setOpacity(0.5)
 
         # Load sample STED image
         self.initialdir = os.getcwd()
@@ -245,20 +248,29 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.pxSize = pxSize
             self.inputVb.clear()
 
+            # Image loading
             im = Image.open(self.filename)
             self.inputData = np.array(im).astype(np.float64)
             self.shape = self.inputData.shape
             self.inputData = self.inputData[crop:self.shape[0] - crop,
                                             crop:self.shape[1] - crop]
             self.shape = self.inputData.shape
+            self.inputDataS = ndi.gaussian_filter(self.inputData,
+                                                  300/self.pxSize)
+            self.meanS = np.mean(self.inputDataS)
+            self.stdS = np.std(self.inputDataS)
+            self.showIm = np.fliplr(np.transpose(self.inputData))
+            self.showImS = np.fliplr(np.transpose(self.inputDataS))
+
+            # Image plotting
             self.inputImg = pg.ImageItem()
             self.inputVb.addItem(self.inputImg)
             self.inputVb.setAspectLocked(True)
-            showIm = np.fliplr(np.transpose(self.inputData))
-            self.inputImg.setImage(showIm)
+            self.inputImg.setImage(self.showIm)
             self.inputImgHist.setImageItem(self.inputImg)
             self.addItem(self.inputImgHist, row=0, col=1)
             self.inputVb.addItem(self.roi)
+            self.inputVb.addItem(self.thresIm)
 
             # We need n 1um-sized subimages
             self.subimgPxSize = float(self.main.roiSizeEdit.text())/self.pxSize
@@ -272,9 +284,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             self.updateROI()
             self.updatePlot()
-
-            self.dataMean = np.mean(self.inputData)
-            self.dataStd = np.std(self.inputData)
 
             return True
 
@@ -300,11 +309,13 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.inputImgHist.setLevels(0, 1)
 
     def updatePlot(self):
-        inputIm = np.fliplr(np.transpose(self.inputData))
-        self.selected = self.roi.getArrayRegion(inputIm, self.inputImg)
+
+        self.subImgPlot.clear()
+
+        self.selected = self.roi.getArrayRegion(self.showIm, self.inputImg)
+        self.selectedS = self.roi.getArrayRegion(self.showImS, self.inputImg)
         shape = self.selected.shape
         self.subImgSize = shape[0]
-        self.subImgPlot.clear()
         self.subImg.setImage(self.selected)
         self.subImgPlot.addItem(self.subImg)
         self.subImgPlot.vb.setLimits(xMin=-0.05*shape[0], xMax=1.05*shape[0],
@@ -321,8 +332,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.pCorr.clear()
 
+        # We apply intensity threshold to smoothed data so we don't catch
+        # tiny bright spots outside neurons
         thr = np.float(self.main.intThrEdit.text())
-        if np.any(self.selected > self.dataMean + thr*self.dataStd):
+        if np.any(self.selectedS > self.meanS + thr*self.stdS):
 
             self.getDirection()
 
@@ -398,15 +411,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             # code for visualization of the output
             neuron = np.array(neuron).reshape(*self.n)
-            neuron = np.repeat(np.repeat(neuron, self.inputData.shape[0]/self.n[0], axis=0), self.inputData.shape[1]/self.n[1], axis=1)
-#            ones = np.ones((self.inputData.shape[0]/self.n[0],
-#                            self.inputData.shape[1]/self.n[1]))
-#            showIm = np.fliplr(np.transpose(np.kron(neuron, ones)))
+            neuron = np.repeat(neuron, self.inputData.shape[0]/self.n[0], 0)
+            neuron = np.repeat(neuron, self.inputData.shape[1]/self.n[1], 1)
             showIm = np.fliplr(np.transpose(neuron))
             self.thresIm.setImage(100*showIm.astype(float))
-            self.thresIm.setZValue(10)  # make sure this image is on top
-            self.thresIm.setOpacity(0.5)
-#            self.thresIm.setScale(self.inputData.shape[0]/self.n[0])
 
         else:
             self.thresIm.clear()

@@ -6,9 +6,11 @@ Created on Fri Jul 15 12:25:40 2016
 """
 
 import os
+import time
 import numpy as np
 from scipy import ndimage as ndi
 import tifffile as tiff
+import multiprocessing as mp
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -120,12 +122,12 @@ class Gollum(QtGui.QMainWindow):
 
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
-        self.intThrEdit = QtGui.QLineEdit('3')
+        self.intThresEdit = QtGui.QLineEdit('0.2')
         gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
         self.sigmaEdit = QtGui.QLineEdit('60')
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
-        self.corr2thrEdit = QtGui.QLineEdit('0.075')
+        self.corrThresEdit = QtGui.QLineEdit('0.075')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
         powLabel = QtGui.QLabel('Sinusoidal pattern power')
@@ -141,13 +143,13 @@ class Gollum(QtGui.QMainWindow):
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
         settingsLayout.addWidget(settingsTitle, 0, 0)
         settingsLayout.addWidget(self.intThrLabel, 1, 0)
-        settingsLayout.addWidget(self.intThrEdit, 1, 1)
+        settingsLayout.addWidget(self.intThresEdit, 1, 1)
         settingsLayout.addWidget(gaussianSigmaLabel, 2, 0)
         settingsLayout.addWidget(self.sigmaEdit, 2, 1)
         settingsLayout.addWidget(minLenLabel, 3, 0)
         settingsLayout.addWidget(self.lineLengthEdit, 3, 1)
         settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 4, 0)
-        settingsLayout.addWidget(self.corr2thrEdit, 4, 1)
+        settingsLayout.addWidget(self.corrThresEdit, 4, 1)
         settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 5, 0)
         settingsLayout.addWidget(self.thetaStepEdit, 5, 1)
         settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 6, 0)
@@ -253,50 +255,43 @@ class Gollum(QtGui.QMainWindow):
         m = self.n
 
         # shape the data into the subimg that we need for the analysis
-        self.blocksInput = tools.blockshaped(self.inputData,
-                                             self.inputData.shape[0]/m[0],
-                                             self.inputData.shape[1]/m[1])
-
-        # initialize the matrix for storing the ring detection in each subimg
-        M = np.zeros(m[0]*m[1], dtype=bool)
-        self.localCorr = np.zeros(len(self.blocksInput))
+        blocksInput = tools.blockshaped(self.inputData,
+                                        self.inputData.shape[0]/m[0],
+                                        self.inputData.shape[1]/m[1])
 
         # for every subimg, we apply the correlation method for ring finding
-        minLen = np.float(self.lineLengthEdit.text())/self.pxSize
-        wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+        intThres = np.float(self.intThresEdit.text())
+        corrThres = np.float(self.corrThresEdit.text())
         sigma = np.float(self.sigmaEdit.text())/self.pxSize
+        minLen = np.float(self.lineLengthEdit.text())/self.pxSize
+        thetaStep = np.float(self.deltaAngleEdit.text())
+        deltaTh = np.float(self.deltaAngleEdit.text())
+        wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+        sinPow = np.float(self.sinPowerEdit.text())
 
         # We apply intensity threshold to smoothed data so we don't catch
         # tiny bright spots outside neurons
         inputDataS = ndi.gaussian_filter(self.inputData, 300/self.pxSize)
         meanS = np.mean(inputDataS)
         stdS = np.std(inputDataS)
-        blocksInputS = tools.blockshaped(inputDataS,
-                                         inputDataS.shape[0]/m[0],
+        blocksInputS = tools.blockshaped(inputDataS, inputDataS.shape[0]/m[0],
                                          inputDataS.shape[1]/m[1])
-
-        for i in np.arange(len(self.blocksInput)):
-            rings = False
-            block = self.blocksInput[i, :, :]
-            blockS = blocksInputS[i, :, :]
-
-            # First discrimination for signal level.
-            thr = np.float(self.intThrEdit.text())
-            if np.any(blockS > meanS + thr*stdS):
-                args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
-                        np.float(self.thetaStepEdit.text()),
-                        np.float(self.deltaAngleEdit.text()), wvlen,
-                        np.float(self.sinPowerEdit.text())]
-                output = tools.corrMethod(block, *args)
-                angle, corrTheta, corrMax, theta, phase, rings = output
-
-                # Store results
-                self.localCorr[i] = corrMax
-
-            else:
-                self.localCorr[i] = None
-
-            M[i] = rings
+        # Multi-core code
+        cpus = mp.cpu_count()
+        step = len(blocksInput) // cpus
+        chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
+        chunks[-1][1] = len(blocksInput)
+        # Correlation arguments
+        cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
+        # Finder arguments
+        fArg = meanS, stdS, intThres, cArgs
+        args = [[blocksInput[i:j], blocksInputS[i:j], fArg] for i, j in chunks]
+        pool = mp.Pool(processes=cpus)
+        results = pool.map(chunkFinder, args)
+        pool.close()
+        pool.join()
+        self.localCorr = np.concatenate(results[:])
+        M = self.localCorr > corrThres
 
         # code for visualization of the output
         M1 = M.reshape(*m)
@@ -305,9 +300,8 @@ class Gollum(QtGui.QMainWindow):
         showIm = np.fliplr(np.transpose(self.inputData))
         self.outputImg.setImage(showIm)
         showIm = np.fliplr(np.transpose(self.outputData))
-        print(showIm.shape, np.sum(showIm))
         self.outputResult.setImage(showIm)
-        self.outputResult.setZValue(10)  # make sure this image is on top
+        self.outputResult.setZValue(10)     # make sure this image is on top
         self.outputResult.setOpacity(0.5)
 
         self.outputVb.setLimits(xMin=-0.05*self.shape[0],
@@ -342,6 +336,7 @@ class Gollum(QtGui.QMainWindow):
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
             print('Processing folder ' + os.path.split(filenames[0])[0])
+            t0 = time.time()
             for i in np.arange(len(filenames)):
                 print(os.path.split(filenames[i])[1])
                 function(filenames[i])
@@ -362,6 +357,8 @@ class Gollum(QtGui.QMainWindow):
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
 
+            print('Done in {.0} seconds'.format(time.time() - t0))
+
             # plot histogram of the correlation values
             plotData = np.nan_to_num(corrArray.flatten())
             plt.figure(0)
@@ -381,17 +378,30 @@ class Gollum(QtGui.QMainWindow):
         self.batch(self.loadSTED)
 
 
-def chunkFinder(data, args):
+def chunkFinder(args):
 
-    data, dataS, thr, meanS, stdS, corr2thr, sigma, minLen, thetaStep = args
+    blocks, blocksS, fArgs = args
+    meanS, stdS, intThres, cArgs = fArgs
+#    cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
 
-    if np.any(block > mean + thr*std):
-        args = [np.float(self.corr2thrEdit.text()), sigma, minLen,
-                np.float(self.thetaStepEdit.text()),
-                np.float(self.deltaAngleEdit.text()), wvlen,
-                np.float(self.sinPowerEdit.text())]
-        output = tools.corrMethod(block, *args)
-        angle, corrTheta, corrMax, theta, phase, rings = output
+    localCorr = np.zeros(len(blocks))
+
+    for i in np.arange(len(blocks)):
+        block = blocks[i]
+        blockS = blocksS[i]
+        rings = False
+
+        if np.any(blockS > meanS + intThres*stdS):
+            output = tools.corrMethod(block, *cArgs)
+            angle, corrTheta, corrMax, theta, phase, rings = output
+
+            # Store results
+            localCorr[i] = corrMax
+        else:
+            localCorr[i] = None
+
+    return localCorr
+
 
 if __name__ == '__main__':
     app = QtGui.QApplication([])
