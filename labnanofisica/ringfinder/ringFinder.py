@@ -335,7 +335,9 @@ class Gollum(QtGui.QMainWindow):
             nfiles = len(filenames)
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-            print('Processing folder ' + os.path.split(filenames[0])[0])
+            path = os.path.split(filenames[0])[0]
+            folder = os.path.split(path)[1]
+            print('Processing folder', path)
             t0 = time.time()
             for i in np.arange(len(filenames)):
                 print(os.path.split(filenames[i])[1])
@@ -357,16 +359,22 @@ class Gollum(QtGui.QMainWindow):
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
 
-            print('Done in {.0} seconds'.format(time.time() - t0))
+            print('Done in {0:.0f} seconds'.format(time.time() - t0))
 
             # plot histogram of the correlation values
             plotData = np.nan_to_num(corrArray.flatten())
             plt.figure(0)
-            plt.hist(plotData, bins=30, range=(0.0001, np.max(plotData)))
+            hRange = (0.0001, np.max(plotData))
+            y, x, _ = plt.hist(plotData, bins=30, range=hRange)
+            x = (x[1:] + x[:-1])/2
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
             plt.ylabel("Frequency")
+            plt.savefig(os.path.join(path, folder + 'corr_hist'))
             plt.show()
+
+            np.save(os.path.join(path, 'histx'), x)
+            np.save(os.path.join(path, 'histy'), y)
 
         except IndexError:
             print("No file selected!")
