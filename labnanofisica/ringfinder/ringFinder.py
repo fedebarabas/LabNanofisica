@@ -9,6 +9,8 @@ import os
 import time
 import numpy as np
 from scipy import ndimage as ndi
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 import tifffile as tiff
 import multiprocessing as mp
 
@@ -18,6 +20,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 
 import labnanofisica.utils as utils
+import labnanofisica.gaussians as gaussians
 import labnanofisica.ringfinder.tools as tools
 
 
@@ -363,15 +366,33 @@ class Gollum(QtGui.QMainWindow):
 
             # plot histogram of the correlation values
             plotData = np.nan_to_num(corrArray.flatten())
-            plt.figure(0)
             hRange = (0.0001, np.max(plotData))
             y, x, _ = plt.hist(plotData, bins=30, range=hRange)
             x = (x[1:] + x[:-1])/2
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
             plt.ylabel("Frequency")
+
+            # Bimodal fitting
+            expected = (0.05, 0.03, np.max(y[:len(x)//2]),
+                        0.10, 0.02, np.max(y[len(x)//2:]))
+            params, cov = curve_fit(gaussians.bimodal, x, y, expected)
+            threshold = norm.ppf(0.95, *params[:2])
+            ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
+
+            # Plotting
+            plt.figure(0)
+            plt.bar(x, y, align='center', width=(x[1] - x[0]))
+            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,
+                     label='model')
+            plt.plot(x, gaussians.gauss(x, *params[:3]), color='green', lw=3,
+                     label='no rings')
+            plt.plot(x, gaussians.gauss(x, *params[-3:]), color='black', lw=3,
+                     label='rings')
+            plt.legend()
+
             plt.savefig(os.path.join(path, folder + 'corr_hist'))
-            plt.show()
+            plt.close()
 
             np.save(os.path.join(path, 'histx'), x)
             np.save(os.path.join(path, 'histy'), y)

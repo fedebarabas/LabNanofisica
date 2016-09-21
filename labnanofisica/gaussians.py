@@ -15,7 +15,15 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 
-def gaussian(x, fwhm):
+def gauss(x, mu, sigma, A):
+    return np.abs(A)*np.exp(-(x-mu)**2/2/sigma**2)
+
+
+def bimodal(x, mu1, sigma1, A1, mu2, sigma2, A2):
+    return gauss(x, mu1, sigma1, A1) + gauss(x, mu2, sigma2, A2)
+
+
+def gauss_fwhm(x, fwhm):
     return np.exp(- 4 * np.log(2) * (x / fwhm)**2)
 
 
