@@ -38,9 +38,9 @@ class Gollum(QtGui.QMainWindow):
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&Run')
-        batchSTORMAction = QtGui.QAction('Analyse batch of STORM images...',
+        batchSTORMAction = QtGui.QAction('Analyze batch of STORM images...',
                                          self)
-        batchSTEDAction = QtGui.QAction('Analyse batch of STED images...',
+        batchSTEDAction = QtGui.QAction('Analyze batch of STED images...',
                                         self)
 
         batchSTORMAction.triggered.connect(self.batchSTORM)
@@ -121,6 +121,7 @@ class Gollum(QtGui.QMainWindow):
         loadLayout.addWidget(self.STEDPxEdit, 5, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
         loadLayout.addWidget(self.loadSTEDButton, 6, 0, 1, 2)
+        loadLayout.setColumnMinimumWidth(1, 40)
         loadFrame.setFixedHeight(200)
 
         # Ring finding method settings frame
@@ -162,6 +163,7 @@ class Gollum(QtGui.QMainWindow):
         settingsLayout.addWidget(wvlenLabel, 8, 0)
         settingsLayout.addWidget(self.wvlenEdit, 8, 1)
         settingsLayout.addWidget(self.corrButton, 9, 0, 1, 2)
+        loadLayout.setColumnMinimumWidth(1, 40)
         settingsFrame.setFixedHeight(280)
 
         buttonsLayout = QtGui.QGridLayout()
@@ -337,28 +339,33 @@ class Gollum(QtGui.QMainWindow):
                                            self.initialdir)
             nfiles = len(filenames)
             function(filenames[0])
-            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+            corrArray = np.zeros((nfiles, *self.n))
+
+            # Expand correlation array so it matches data shape
+            m = self.shape/self.n
+            corrExp = np.empty((nfiles, *self.initShape), dtype=np.single)
+            corrExp[:] = np.NAN
+
             path = os.path.split(filenames[0])[0]
             folder = os.path.split(path)[1]
             print('Processing folder', path)
             t0 = time.time()
-            for i in np.arange(len(filenames)):
+            for i in np.arange(nfiles):
                 print(os.path.split(filenames[i])[1])
                 function(filenames[i])
                 self.ringFinder(False)
                 corr = self.localCorr.reshape(*self.n)
                 corrArray[i] = corr
+
+                expanded = np.repeat(np.repeat(corr, m[1], axis=1),
+                                     m[0], axis=0)
+                corrExp[i, self.crop:self.initShape[0] - self.crop,
+                        self.crop:self.initShape[1] - self.crop] = expanded
+
+                # Save correlation values array
                 corrName = utils.insertSuffix(filenames[i], '_correlation')
-
-                # Expand correlation array so it matches data shape
-                m = self.shape/self.n
-                corr = np.repeat(np.repeat(corr, m[1], axis=1), m[0], axis=0)
-                im = np.empty(self.initShape, dtype=np.single)
-                im[:] = np.NAN
-                im[self.crop:self.initShape[0] - self.crop,
-                   self.crop:self.initShape[1] - self.crop] = corr
-
-                tiff.imsave(corrName, im, software='Gollum', imagej=True,
+                tiff.imsave(corrName, corrExp[i], software='Gollum',
+                            imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
 
@@ -379,6 +386,20 @@ class Gollum(QtGui.QMainWindow):
             params, cov = curve_fit(gaussians.bimodal, x, y, expected)
             threshold = norm.ppf(0.95, *params[:2])
             ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
+
+            # Save boolean images (rings or no rings)
+            ringsArray = corrArray > ringsRatio
+            ringsExp = np.zeros((nfiles, *self.initShape), dtype=np.bool)
+            for i in np.arange(len(filenames)):
+                expanded = np.repeat(np.repeat(ringsArray[i], m[1], axis=1),
+                                     m[0], axis=0)
+                ringsExp[i, self.crop:self.initShape[0] - self.crop,
+                         self.crop:self.initShape[1] - self.crop] = expanded
+                tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
+                            ringsExp[i].astype(np.uint16), software='Gollum',
+                            imagej=True,
+                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+                            metadata={'spacing': 1, 'unit': 'um'})
 
             # Plotting
             plt.figure(0)

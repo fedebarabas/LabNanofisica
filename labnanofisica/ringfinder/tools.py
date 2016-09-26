@@ -8,7 +8,10 @@ Created on Sun Aug 14 14:53:28 2016
 import numpy as np
 from scipy import ndimage as ndi
 from skimage.feature import peak_local_max
-import skimage.filters as filters
+try:
+    import skimage.filters as filters
+except ImportError:
+    import skimage.filter as filters
 from skimage.transform import probabilistic_hough_line
 
 from pyqtgraph.Qt import QtCore, QtGui
