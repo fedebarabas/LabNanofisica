@@ -70,7 +70,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
-        self.sigmaEdit = QtGui.QLineEdit('60')
+        self.sigmaEdit = QtGui.QLineEdit('180')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
         self.intThrButton.setCheckable(True)
         self.intThrEdit = QtGui.QLineEdit('0.2')
@@ -142,6 +142,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         layout.setRowMinimumHeight(0, 850)
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
+        self.sigmaEdit.textChanged.connect(self.imageWidget.updateImage)
         self.loadSTORMButton.clicked.connect(self.imageWidget.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.imageWidget.loadSTED)
 
@@ -255,12 +256,9 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.inputData = self.inputData[crop:self.shape[0] - crop,
                                             crop:self.shape[1] - crop]
             self.shape = self.inputData.shape
-            self.inputDataS = ndi.gaussian_filter(self.inputData,
-                                                  300/self.pxSize)
-            self.meanS = np.mean(self.inputDataS)
-            self.stdS = np.std(self.inputDataS)
+
             self.showIm = np.fliplr(np.transpose(self.inputData))
-            self.showImS = np.fliplr(np.transpose(self.inputDataS))
+            self.updateImage()
 
             # Image plotting
             self.inputImg = pg.ImageItem()
@@ -291,10 +289,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             return False
 
     def loadSTED(self, filename=None):
-        load = self.loadImage(np.float(self.main.STEDPxEdit.text()),
-                              filename=filename)
-        if load:
-            self.main.sigmaEdit.setText('60')
+        self.loadImage(np.float(self.main.STEDPxEdit.text()),
+                       filename=filename)
+#        if load:
+#            self.main.sigmaEdit.setText('60')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -305,8 +303,21 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         load = self.loadImage(np.float(self.main.STORMPxEdit.text()),
                               crop=nExcluded*mag, filename=filename)
         if load:
-            self.main.sigmaEdit.setText('200')
-            self.inputImgHist.setLevels(0, 1)
+#            self.main.sigmaEdit.setText('200')
+            self.inputImgHist.setLevels(0, 0.5)
+
+    def updateImage(self):
+        self.gaussSigma = np.float(self.main.sigmaEdit.text())/self.pxSize
+        self.inputDataS = ndi.gaussian_filter(self.inputData,
+                                              self.gaussSigma)
+        self.meanS = np.mean(self.inputDataS)
+        self.stdS = np.std(self.inputDataS)
+
+        self.showImS = np.fliplr(np.transpose(self.inputDataS))
+
+        # binarization of image
+        thresh = filters.threshold_otsu(self.inputDataS)
+        self.mask = np.fliplr(np.transpose(self.inputDataS < thresh))
 
     def updatePlot(self):
 
@@ -314,6 +325,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.selected = self.roi.getArrayRegion(self.showIm, self.inputImg)
         self.selectedS = self.roi.getArrayRegion(self.showImS, self.inputImg)
+        self.selectedMask = self.roi.getArrayRegion(self.mask, self.inputImg)
         shape = self.selected.shape
         self.subImgSize = shape[0]
         self.subImg.setImage(self.selected)
@@ -342,13 +354,13 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             # for every subimg, we apply the correlation method for
             # ring finding
             corrThres = np.float(self.main.corrThresEdit.text())
-            sigma = np.float(self.main.sigmaEdit.text()) / self.pxSize
             minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
             thStep = np.float(self.main.thetaStepEdit.text())
             deltaTh = np.float(self.main.deltaThEdit.text())
             wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
             sinPow = np.float(self.main.sinPowerEdit.text())
-            args = [corrThres, sigma, minLen, thStep, deltaTh, wvlen, sinPow]
+            args = [corrThres, self.gaussSigma, minLen, thStep, deltaTh, wvlen,
+                    sinPow]
             output = tools.corrMethod(self.selected, *args, developer=True)
             self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
@@ -356,7 +368,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                 self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
                                         theta=thetaMax, phase=phaseMax,
                                         b=sinPow).data
-                self.img1.setImage(self.bestAxon)
+                self.bestAxon = np.ma.array(self.bestAxon,
+                                            mask=self.selectedMask,
+                                            fill_value=0)
+                self.img1.setImage(self.bestAxon.filled(0))
                 self.img2.setImage(self.selected)
 
                 # plot the threshold of correlation chosen by the user
@@ -398,16 +413,14 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             # We apply intensity threshold to smoothed data so we don't catch
             # tiny bright spots outside neurons
-            inputDataS = ndi.gaussian_filter(self.inputData, 300/self.pxSize)
-            meanS = np.mean(inputDataS)
-            stdS = np.std(inputDataS)
-            blocksInputS = tools.blockshaped(inputDataS,
-                                             inputDataS.shape[0]/self.n[0],
-                                             inputDataS.shape[1]/self.n[1])
+            inputDataS = ndi.gaussian_filter(self.inputData, self.gaussSigma)
+            nblocks = np.array(inputDataS.shape)/self.n
+            blocksInputS = tools.blockshaped(inputDataS, *nblocks)
 
             neuron = np.zeros(len(self.blocksInput))
             thr = np.float(self.main.intThrEdit.text())
-            neuron = [np.any(b > meanS + thr*stdS) for b in blocksInputS]
+            threshold = self.meanS + thr*self.stdS
+            neuron = [np.any(b > threshold) for b in blocksInputS]
 
             # code for visualization of the output
             neuron = np.array(neuron).reshape(*self.n)
@@ -422,8 +435,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def imageFilter(self):
         ''' Removes background data from image.'''
 
-        sigma = np.float(self.main.sigmaEdit.text())
-        img = ndi.gaussian_filter(self.inputData, sigma)
+        img = ndi.gaussian_filter(self.inputData, self.gaussSigma)
 
         thresh = filters.threshold_otsu(img)
         binary = img > thresh
@@ -432,11 +444,9 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
     def getDirection(self):
 
-        sigma = np.float(self.main.sigmaEdit.text())
-        minLen = np.float(self.main.lineLengthEdit.text())
-        sigma /= self.pxSize
-        minLen /= self.pxSize
-        self.th0, lines = tools.getDirection(self.selected, sigma, minLen)
+        minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
+        self.th0, lines = tools.getDirection(self.selected, self.gaussSigma,
+                                             minLen)
 
         print('Angle is {}, calculated from {} lines'.format(self.th0,
                                                              len(lines)))

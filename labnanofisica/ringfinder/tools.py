@@ -208,6 +208,13 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
     # line angle calculated
     th0, lines = getDirection(data, sigma, minLen, developer)
 
+    # gaussian filter to get low resolution image
+    img = ndi.gaussian_filter(data, sigma)
+
+    # binarization of image
+    thresh = filters.threshold_otsu(img)
+    mask = img < thresh
+
     if th0 is None:
         return th0, None, None, None, None, False
     else:
@@ -233,6 +240,7 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
                 # creates simulated axon
                 axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
                                     b=sinPow).data
+                axonTheta = np.ma.array(axonTheta, mask=mask)
 
                 # saves correlation for the given phase p
                 corrPhase[p] = pearson(data, axonTheta)

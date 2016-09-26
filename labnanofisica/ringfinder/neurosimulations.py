@@ -11,10 +11,7 @@ import numpy as np
 
 
 class sin2D:
-    def __init__(self, imSize=100, wvlen=10, theta=15, phase=.25,
-                 *args, **kwargs):
-
-        super().__init__(*args, **kwargs)
+    def __init__(self, imSize=100, wvlen=10, theta=15, phase=.25):
 
         self.imSize = imSize    # image size: n X n
         self.wvlen = wvlen      # wavelength (number of pixels per cycle)
@@ -24,7 +21,7 @@ class sin2D:
         self.pi = np.pi
 
         # X is a vector from 1 to imageSize
-        self.X = np.arange(1, self.imSize+1)
+        self.X = np.arange(1, self.imSize + 1)
         # rescale X -> -.5 to .5
         self.X0 = (self.X / self.imSize) - .5
 
