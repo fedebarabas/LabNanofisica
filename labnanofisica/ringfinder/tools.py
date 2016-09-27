@@ -99,21 +99,16 @@ def arrayExt(array):
     return z
 
 
-def getDirection(data, sigma, minLen, debug=False):
+def getDirection(data, binary, minLen, debug=False):
     """Returns the direction (angle) of the neurite in the image data.
 
-    sigma: gaussian filter sigma to blur the image, in px
+    binary: boolean array with same shape as data. True means that the pixel
+        belongs to a neuron and False means background.
     minLen: minimum  line length in px."""
 
-    # gaussian filter to get low resolution image
-    img = ndi.gaussian_filter(data, sigma)
-
-    # binarization of image
-    thresh = filters.threshold_otsu(img)
-    binary = img > thresh
     th0, sigmaTh, lines = linesFromBinary(binary, minLen, debug)
     if debug:
-        print('sigma1', sigmaTh)
+        print('sigma1', np.round(sigmaTh, 2))
 
     try:
 
@@ -127,7 +122,7 @@ def getDirection(data, sigma, minLen, debug=False):
                     print('sigmaTh too high, will rotate data and try again')
                 th0, sigmaTh, lines = linesFromBinary(np.rot90(binary), minLen)
                 if debug:
-                    print('sigma2', sigmaTh)
+                    print('sigma2', np.round(sigmaTh, 2))
                 if sigmaTh < 20:
                     return th0 - 90, lines
                 else:
@@ -182,7 +177,7 @@ def linesFromBinary(binaryData, minLen, debug=False):
         return np.mean(angleArr), np.std(angleArr), lines
 
 
-def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
+def corrMethod(data, thres, mask, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
     """Searches for rings by correlating the image data with a given
     sinusoidal pattern
@@ -206,14 +201,7 @@ def corrMethod(data, thres, sigma, minLen, thStep, deltaTh, wvlen, sinPow,
     rings (bool): ring presence"""
 
     # line angle calculated
-    th0, lines = getDirection(data, sigma, minLen, developer)
-
-    # gaussian filter to get low resolution image
-    img = ndi.gaussian_filter(data, sigma)
-
-    # binarization of image
-    thresh = filters.threshold_otsu(img)
-    mask = img < thresh
+    th0, lines = getDirection(data, np.invert(mask), minLen, developer)
 
     if th0 is None:
         return th0, None, None, None, None, False

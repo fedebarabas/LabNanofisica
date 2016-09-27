@@ -11,6 +11,10 @@ import numpy as np
 from scipy import ndimage as ndi
 from scipy.optimize import curve_fit
 from scipy.stats import norm
+try:
+    import skimage.filters as filters
+except ImportError:
+    import skimage.filter as filters
 import tifffile as tiff
 import multiprocessing as mp
 
@@ -128,7 +132,7 @@ class Gollum(QtGui.QMainWindow):
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
         self.intThresEdit = QtGui.QLineEdit('0.2')
         gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
-        self.sigmaEdit = QtGui.QLineEdit('60')
+        self.sigmaEdit = QtGui.QLineEdit('200')
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.corrThresEdit = QtGui.QLineEdit('0.075')
@@ -173,7 +177,7 @@ class Gollum(QtGui.QMainWindow):
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
-
+        self.sigmaEdit.textChanged.connect(self.updateImage)
         self.corrButton.clicked.connect(self.ringFinder)
 
         # Load sample STED image
@@ -182,10 +186,7 @@ class Gollum(QtGui.QMainWindow):
                                    'ringfinder', 'spectrinSTED.tif'))
 
     def loadSTED(self, filename=None):
-        load = self.loadImage(np.float(self.STEDPxEdit.text()),
-                              filename=filename)
-        if load:
-            self.sigmaEdit.setText('60')
+        self.loadImage(np.float(self.STEDPxEdit.text()), filename=filename)
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -196,7 +197,6 @@ class Gollum(QtGui.QMainWindow):
         load = self.loadImage(np.float(self.STORMPxEdit.text()),
                               crop=nExcluded*mag, filename=filename)
         if load:
-            self.sigmaEdit.setText('200')
             self.inputImgHist.setLevels(0, 0.3)
 
     def loadImage(self, pxSize, crop=0, filename=None):
@@ -222,6 +222,7 @@ class Gollum(QtGui.QMainWindow):
                 self.inputData = self.inputData[crop:self.initShape[0] - crop,
                                                 crop:self.initShape[1] - crop]
                 self.shape = self.inputData.shape
+                self.updateImage()
                 self.inputVb.addItem(self.inputImgItem)
                 showIm = np.fliplr(np.transpose(self.inputData))
                 self.inputImgItem.setImage(showIm)
@@ -247,6 +248,20 @@ class Gollum(QtGui.QMainWindow):
         except OSError:
             print("No file selected!")
 
+    def updateImage(self):
+        self.gaussSigma = np.float(self.sigmaEdit.text())/self.pxSize
+        self.inputDataS = ndi.gaussian_filter(self.inputData,
+                                              self.gaussSigma)
+        self.meanS = np.mean(self.inputDataS)
+        self.stdS = np.std(self.inputDataS)
+
+        self.showImS = np.fliplr(np.transpose(self.inputDataS))
+
+        # binarization of image
+        thresh = filters.threshold_otsu(self.inputDataS)
+        self.mask = self.inputDataS < thresh
+        self.showMask = np.fliplr(np.transpose(self.mask))
+
     def ringFinder(self, show=True):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
@@ -260,37 +275,31 @@ class Gollum(QtGui.QMainWindow):
         m = self.n
 
         # shape the data into the subimg that we need for the analysis
-        blocksInput = tools.blockshaped(self.inputData,
-                                        self.inputData.shape[0]/m[0],
-                                        self.inputData.shape[1]/m[1])
+        nblocks = np.array(self.inputData.shape)/m
+        blocksInput = tools.blockshaped(self.inputData, *nblocks)
+        blocksInputS = tools.blockshaped(self.inputDataS, *nblocks)
+        blocksMask = tools.blockshaped(self.mask, *nblocks)
 
         # for every subimg, we apply the correlation method for ring finding
         intThres = np.float(self.intThresEdit.text())
         corrThres = np.float(self.corrThresEdit.text())
-        sigma = np.float(self.sigmaEdit.text())/self.pxSize
         minLen = np.float(self.lineLengthEdit.text())/self.pxSize
         thetaStep = np.float(self.deltaAngleEdit.text())
         deltaTh = np.float(self.deltaAngleEdit.text())
         wvlen = np.float(self.wvlenEdit.text())/self.pxSize
         sinPow = np.float(self.sinPowerEdit.text())
 
-        # We apply intensity threshold to smoothed data so we don't catch
-        # tiny bright spots outside neurons
-        inputDataS = ndi.gaussian_filter(self.inputData, 300/self.pxSize)
-        meanS = np.mean(inputDataS)
-        stdS = np.std(inputDataS)
-        blocksInputS = tools.blockshaped(inputDataS, inputDataS.shape[0]/m[0],
-                                         inputDataS.shape[1]/m[1])
         # Multi-core code
         cpus = mp.cpu_count()
         step = len(blocksInput) // cpus
         chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
         chunks[-1][1] = len(blocksInput)
         # Correlation arguments
-        cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
+        cArgs = (corrThres, , minLen, thetaStep, deltaTh, wvlen,
+                 sinPow)
         # Finder arguments
-        fArg = meanS, stdS, intThres, cArgs
-        args = [[blocksInput[i:j], blocksInputS[i:j], fArg] for i, j in chunks]
+        fArg = self.meanS, self.stdS, intThres, cArgs
+        args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j], fArg] for i, j in chunks]
         pool = mp.Pool(processes=cpus)
         results = pool.map(chunkFinder, args)
         pool.close()
@@ -430,7 +439,7 @@ class Gollum(QtGui.QMainWindow):
 
 def chunkFinder(args):
 
-    blocks, blocksS, fArgs = args
+    blocks, blocksS, blocksMask, fArgs = args
     meanS, stdS, intThres, cArgs = fArgs
 #    cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
 
@@ -439,10 +448,13 @@ def chunkFinder(args):
     for i in np.arange(len(blocks)):
         block = blocks[i]
         blockS = blocksS[i]
+        mask = blocksMask[i]
         rings = False
 
+        # We apply intensity threshold to smoothed data so we don't catch
+        # tiny bright spots outside neurons
         if np.any(blockS > meanS + intThres*stdS):
-            output = tools.corrMethod(block, *cArgs)
+            output = tools.corrMethod(block, mask, *cArgs)
             angle, corrTheta, corrMax, theta, phase, rings = output
 
             # Store results

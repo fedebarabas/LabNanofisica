@@ -9,7 +9,10 @@ import os
 import numpy as np
 
 from scipy import ndimage as ndi
-import skimage.filters as filters
+try:
+    import skimage.filters as filters
+except ImportError:
+    import skimage.filter as filters
 
 from PIL import Image
 import pyqtgraph as pg
@@ -258,7 +261,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.shape = self.inputData.shape
 
             self.showIm = np.fliplr(np.transpose(self.inputData))
-            self.updateImage()
 
             # Image plotting
             self.inputImg = pg.ImageItem()
@@ -269,6 +271,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.addItem(self.inputImgHist, row=0, col=1)
             self.inputVb.addItem(self.roi)
             self.inputVb.addItem(self.thresIm)
+
+            self.updateImage()
 
             # We need n 1um-sized subimages
             self.subimgPxSize = float(self.main.roiSizeEdit.text())/self.pxSize
@@ -291,8 +295,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def loadSTED(self, filename=None):
         self.loadImage(np.float(self.main.STEDPxEdit.text()),
                        filename=filename)
-#        if load:
-#            self.main.sigmaEdit.setText('60')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -303,7 +305,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         load = self.loadImage(np.float(self.main.STORMPxEdit.text()),
                               crop=nExcluded*mag, filename=filename)
         if load:
-#            self.main.sigmaEdit.setText('200')
             self.inputImgHist.setLevels(0, 0.5)
 
     def updateImage(self):
@@ -317,7 +318,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         # binarization of image
         thresh = filters.threshold_otsu(self.inputDataS)
-        self.mask = np.fliplr(np.transpose(self.inputDataS < thresh))
+        self.mask = self.inputDataS < thresh
+        self.showMask = np.fliplr(np.transpose(self.mask))
+        self.selectedMask = self.roi.getArrayRegion(self.showMask,
+                                                    self.inputImg).astype(bool)
 
     def updatePlot(self):
 
@@ -325,7 +329,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.selected = self.roi.getArrayRegion(self.showIm, self.inputImg)
         self.selectedS = self.roi.getArrayRegion(self.showImS, self.inputImg)
-        self.selectedMask = self.roi.getArrayRegion(self.mask, self.inputImg)
+        self.selectedMask = self.roi.getArrayRegion(self.showMask,
+                                                    self.inputImg).astype(bool)
         shape = self.selected.shape
         self.subImgSize = shape[0]
         self.subImg.setImage(self.selected)
@@ -351,16 +356,16 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             self.getDirection()
 
-            # for every subimg, we apply the correlation method for
-            # ring finding
+            # we apply the correlation method for ring finding for the
+            # selected subimg
             corrThres = np.float(self.main.corrThresEdit.text())
             minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
             thStep = np.float(self.main.thetaStepEdit.text())
             deltaTh = np.float(self.main.deltaThEdit.text())
             wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
             sinPow = np.float(self.main.sinPowerEdit.text())
-            args = [corrThres, self.gaussSigma, minLen, thStep, deltaTh, wvlen,
-                    sinPow]
+            args = [corrThres, self.selectedMask, minLen, thStep, deltaTh,
+                    wvlen, sinPow]
             output = tools.corrMethod(self.selected, *args, developer=True)
             self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
 
@@ -435,21 +440,17 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def imageFilter(self):
         ''' Removes background data from image.'''
 
-        img = ndi.gaussian_filter(self.inputData, self.gaussSigma)
-
-        thresh = filters.threshold_otsu(img)
-        binary = img > thresh
-        im = np.fliplr(np.transpose(self.inputData * binary))
+        im = np.fliplr(np.transpose(self.inputData * np.invert(self.mask)))
         self.inputImg.setImage(im)
 
     def getDirection(self):
 
         minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
-        self.th0, lines = tools.getDirection(self.selected, self.gaussSigma,
+        self.th0, lines = tools.getDirection(self.selected,
+                                             np.invert(self.selectedMask),
                                              minLen)
-
-        print('Angle is {}, calculated from {} lines'.format(self.th0,
-                                                             len(lines)))
+        text = 'Angle is {0:.1f}, calculated from {0:.0f} lines'
+        print(text.format(self.th0, len(lines)))
 
         # Lines plot
         pen = pg.mkPen(color=(0, 255, 100), width=1, style=QtCore.Qt.SolidLine,
