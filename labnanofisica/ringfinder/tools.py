@@ -177,7 +177,7 @@ def linesFromBinary(binaryData, minLen, debug=False):
         return np.mean(angleArr), np.std(angleArr), lines
 
 
-def corrMethod(data, thres, mask, minLen, thStep, deltaTh, wvlen, sinPow,
+def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
     """Searches for rings by correlating the image data with a given
     sinusoidal pattern

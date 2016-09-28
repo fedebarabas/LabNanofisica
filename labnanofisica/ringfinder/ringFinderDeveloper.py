@@ -364,7 +364,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             deltaTh = np.float(self.main.deltaThEdit.text())
             wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
             sinPow = np.float(self.main.sinPowerEdit.text())
-            args = [corrThres, self.selectedMask, minLen, thStep, deltaTh,
+            args = [self.selectedMask, corrThres, minLen, thStep, deltaTh,
                     wvlen, sinPow]
             output = tools.corrMethod(self.selected, *args, developer=True)
             self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output

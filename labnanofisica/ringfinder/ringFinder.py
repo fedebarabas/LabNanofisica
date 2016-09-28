@@ -295,22 +295,21 @@ class Gollum(QtGui.QMainWindow):
         chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
         chunks[-1][1] = len(blocksInput)
         # Correlation arguments
-        cArgs = (corrThres, , minLen, thetaStep, deltaTh, wvlen,
-                 sinPow)
+        cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
         # Finder arguments
         fArg = self.meanS, self.stdS, intThres, cArgs
-        args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j], fArg] for i, j in chunks]
+        args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j], fArg]
+                for i, j in chunks]
         pool = mp.Pool(processes=cpus)
         results = pool.map(chunkFinder, args)
         pool.close()
         pool.join()
         self.localCorr = np.concatenate(results[:])
-        M = self.localCorr > corrThres
 
         # code for visualization of the output
-        M1 = M.reshape(*m)
-        self.outputData = np.kron(M1, np.ones((self.inputData.shape[0]/m[0],
-                                               self.inputData.shape[0]/m[1])))
+        self.outputData = np.kron(self.localCorr.reshape(*m),
+                                  np.ones((self.inputData.shape[0]/m[0],
+                                           self.inputData.shape[0]/m[1])))
         showIm = np.fliplr(np.transpose(self.inputData))
         self.outputImg.setImage(showIm)
         showIm = np.fliplr(np.transpose(self.outputData))
@@ -348,11 +347,12 @@ class Gollum(QtGui.QMainWindow):
                                            self.initialdir)
             nfiles = len(filenames)
             function(filenames[0])
-            corrArray = np.zeros((nfiles, *self.n))
+            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
 
             # Expand correlation array so it matches data shape
             m = self.shape/self.n
-            corrExp = np.empty((nfiles, *self.initShape), dtype=np.single)
+            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+                               dtype=np.single)
             corrExp[:] = np.NAN
 
             path = os.path.split(filenames[0])[0]
@@ -390,15 +390,17 @@ class Gollum(QtGui.QMainWindow):
             plt.ylabel("Frequency")
 
             # Bimodal fitting
-            expected = (0.05, 0.03, np.max(y[:len(x)//2]),
-                        0.10, 0.02, np.max(y[len(x)//2:]))
+            expected = (0.07, 0.03, np.max(y[:len(x)//2]),
+                        0.15, 0.02, np.max(y[len(x)//2:]))
             params, cov = curve_fit(gaussians.bimodal, x, y, expected)
             threshold = norm.ppf(0.95, *params[:2])
             ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
 
             # Save boolean images (rings or no rings)
             ringsArray = corrArray > ringsRatio
-            ringsExp = np.zeros((nfiles, *self.initShape), dtype=np.bool)
+            print(np.sum(ringsArray))
+            ringsExp = np.zeros((nfiles, self.initShape[0], self.initShape[1]),
+                                dtype=bool)
             for i in np.arange(len(filenames)):
                 expanded = np.repeat(np.repeat(ringsArray[i], m[1], axis=1),
                                      m[0], axis=0)
