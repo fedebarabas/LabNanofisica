@@ -73,10 +73,10 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
-        self.sigmaEdit = QtGui.QLineEdit('180')
+        self.sigmaEdit = QtGui.QLineEdit('150')
         self.intThrButton = QtGui.QPushButton('Intensity threshold')
         self.intThrButton.setCheckable(True)
-        self.intThrEdit = QtGui.QLineEdit('0.2')
+        self.intThresEdit = QtGui.QLineEdit('0.5')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -107,7 +107,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         settingsLayout.addWidget(self.roiLabel, 1, 0)
         settingsLayout.addWidget(self.roiSizeEdit, 1, 1)
         settingsLayout.addWidget(self.intThrLabel, 2, 0)
-        settingsLayout.addWidget(self.intThrEdit, 2, 1)
+        settingsLayout.addWidget(self.intThresEdit, 2, 1)
         settingsLayout.addWidget(self.intThrButton, 3, 0, 1, 2)
         settingsLayout.addWidget(self.sigmaLabel, 4, 0)
         settingsLayout.addWidget(self.sigmaEdit, 4, 1)
@@ -146,6 +146,7 @@ class GollumDeveloper(QtGui.QMainWindow):
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
         self.sigmaEdit.textChanged.connect(self.imageWidget.updateImage)
+        self.intThresEdit.textChanged.connect(self.imageWidget.updateImage)
         self.loadSTORMButton.clicked.connect(self.imageWidget.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.imageWidget.loadSTED)
 
@@ -181,10 +182,14 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.inputImg = pg.ImageItem()
         self.inputVb.addItem(self.inputImg)
         self.inputVb.setAspectLocked(True)
+        self.thresBlockIm = pg.ImageItem()
+        self.thresBlockIm.setZValue(10)  # make sure this image is on top
+        self.thresBlockIm.setOpacity(0.5)
+        self.inputVb.addItem(self.thresBlockIm)
         self.thresIm = pg.ImageItem()
-        self.inputVb.addItem(self.thresIm)
         self.thresIm.setZValue(20)  # make sure this image is on top
         self.thresIm.setOpacity(0.5)
+        self.inputVb.addItem(self.thresIm)
 
         # Contrast/color control
         self.inputImgHist = pg.HistogramLUTItem()
@@ -270,6 +275,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.inputImgHist.setImageItem(self.inputImg)
             self.addItem(self.inputImgHist, row=0, col=1)
             self.inputVb.addItem(self.roi)
+            self.inputVb.addItem(self.thresBlockIm)
             self.inputVb.addItem(self.thresIm)
 
             self.updateImage()
@@ -317,8 +323,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.showImS = np.fliplr(np.transpose(self.inputDataS))
 
         # binarization of image
-        thresh = filters.threshold_otsu(self.inputDataS)
-        self.mask = self.inputDataS < thresh
+#        thresh = filters.threshold_otsu(self.inputDataS)
+#        self.mask = self.inputDataS < thresh
+        thr = np.float(self.main.intThresEdit.text())
+        self.mask = self.inputDataS < self.meanS + thr*self.stdS
         self.showMask = np.fliplr(np.transpose(self.mask))
         self.selectedMask = self.roi.getArrayRegion(self.showMask,
                                                     self.inputImg).astype(bool)
@@ -344,6 +352,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.roiSize = np.float(self.main.roiSizeEdit.text()) / self.pxSize
         self.roi.setSize(self.roiSize, self.roiSize)
         self.roi.step = int(self.shape[0]/self.n[0])
+        self.roi.keyPos = (0, 0)
 
     def corrMethodGUI(self):
 
@@ -351,7 +360,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         # We apply intensity threshold to smoothed data so we don't catch
         # tiny bright spots outside neurons
-        thr = np.float(self.main.intThrEdit.text())
+        thr = np.float(self.main.intThresEdit.text())
         if np.any(self.selectedS > self.meanS + thr*self.stdS):
 
             self.getDirection()
@@ -423,7 +432,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             blocksInputS = tools.blockshaped(inputDataS, *nblocks)
 
             neuron = np.zeros(len(self.blocksInput))
-            thr = np.float(self.main.intThrEdit.text())
+            thr = np.float(self.main.intThresEdit.text())
             threshold = self.meanS + thr*self.stdS
             neuron = [np.any(b > threshold) for b in blocksInputS]
 
@@ -432,9 +441,12 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             neuron = np.repeat(neuron, self.inputData.shape[0]/self.n[0], 0)
             neuron = np.repeat(neuron, self.inputData.shape[1]/self.n[1], 1)
             showIm = np.fliplr(np.transpose(neuron))
-            self.thresIm.setImage(100*showIm.astype(float))
+            self.thresBlockIm.setImage(100*showIm.astype(float))
+
+            self.thresIm.setImage(100*self.showMask.astype(float))
 
         else:
+            self.thresBlockIm.clear()
             self.thresIm.clear()
 
     def imageFilter(self):

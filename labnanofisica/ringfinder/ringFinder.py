@@ -91,11 +91,11 @@ class Gollum(QtGui.QMainWindow):
         self.outputVb.setAspectLocked(True)
         self.outputVb.addItem(self.outputImg)
 
-        outputImgHist = pg.HistogramLUTItem()
-        outputImgHist.gradient.loadPreset('thermal')
-        outputImgHist.setImageItem(self.outputImg)
-        outputImgHist.vb.setLimits(yMin=0, yMax=20000)
-        self.outputWidget.addItem(outputImgHist)
+        self.outputImgHist = pg.HistogramLUTItem()
+        self.outputImgHist.gradient.loadPreset('thermal')
+        self.outputImgHist.setImageItem(self.outputImg)
+        self.outputImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.outputWidget.addItem(self.outputImgHist)
 
         self.outputResult = pg.ImageItem()
         self.outputVb.addItem(self.outputResult)
@@ -130,9 +130,9 @@ class Gollum(QtGui.QMainWindow):
 
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
-        self.intThresEdit = QtGui.QLineEdit('0.2')
+        self.intThresEdit = QtGui.QLineEdit('0.5')
         gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
-        self.sigmaEdit = QtGui.QLineEdit('200')
+        self.sigmaEdit = QtGui.QLineEdit('150')
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.corrThresEdit = QtGui.QLineEdit('0.075')
@@ -186,7 +186,8 @@ class Gollum(QtGui.QMainWindow):
                                    'ringfinder', 'spectrinSTED.tif'))
 
     def loadSTED(self, filename=None):
-        self.loadImage(np.float(self.STEDPxEdit.text()), filename=filename)
+        self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
+                       filename=filename)
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -194,16 +195,17 @@ class Gollum(QtGui.QMainWindow):
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.excludedEdit.text())
         mag = np.float(self.magnificationEdit.text())
-        load = self.loadImage(np.float(self.STORMPxEdit.text()),
+        load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
                               crop=nExcluded*mag, filename=filename)
         if load:
             self.inputImgHist.setLevels(0, 0.3)
 
-    def loadImage(self, pxSize, crop=0, filename=None):
+    def loadImage(self, pxSize, tt, crop=0, filename=None):
 
         try:
+
             if not(isinstance(filename, str)):
-                self.filename = utils.getFilename("Load image",
+                self.filename = utils.getFilename('Load ' + tt + ' image',
                                                   [('Tiff file', '.tif')],
                                                   self.initialdir)
             else:
@@ -215,6 +217,9 @@ class Gollum(QtGui.QMainWindow):
                 self.crop = crop
                 self.pxSize = pxSize
                 self.inputVb.clear()
+                self.outputVb.clear()
+                self.outputImg.clear()
+                self.outputResult.clear()
 
                 im = Image.open(self.filename)
                 self.inputData = np.array(im).astype(np.float64)
@@ -240,6 +245,10 @@ class Gollum(QtGui.QMainWindow):
                 self.dataMean = np.mean(self.inputData)
                 self.dataStd = np.std(self.inputData)
 
+                self.outputVb.addItem(self.outputImg)
+                self.outputWidget.addItem(self.outputImgHist)
+                self.outputVb.addItem(self.outputResult)
+
                 return True
 
             else:
@@ -258,8 +267,10 @@ class Gollum(QtGui.QMainWindow):
         self.showImS = np.fliplr(np.transpose(self.inputDataS))
 
         # binarization of image
-        thresh = filters.threshold_otsu(self.inputDataS)
-        self.mask = self.inputDataS < thresh
+#        thresh = filters.threshold_otsu(self.inputDataS)
+#        self.mask = self.inputDataS < thresh
+        thr = np.float(self.intThresEdit.text())
+        self.mask = self.inputDataS < self.meanS + thr*self.stdS
         self.showMask = np.fliplr(np.transpose(self.mask))
 
     def ringFinder(self, show=True):
@@ -307,12 +318,13 @@ class Gollum(QtGui.QMainWindow):
         self.localCorr = np.concatenate(results[:])
 
         # code for visualization of the output
-        self.outputData = np.kron(self.localCorr.reshape(*m),
-                                  np.ones((self.inputData.shape[0]/m[0],
-                                           self.inputData.shape[0]/m[1])))
-        showIm = np.fliplr(np.transpose(self.inputData))
-        self.outputImg.setImage(showIm)
-        showIm = np.fliplr(np.transpose(self.outputData))
+        self.localCorr = np.array(self.localCorr).reshape(*self.n)
+        self.localCorr = np.nan_to_num(self.localCorr)
+        mag = np.array(self.inputData.shape)/self.n
+        self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
+        self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
+        self.outputImg.setImage(np.fliplr(np.transpose(self.inputData)))
+        showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
         self.outputResult.setImage(showIm)
         self.outputResult.setZValue(10)     # make sure this image is on top
         self.outputResult.setOpacity(0.5)
@@ -363,13 +375,13 @@ class Gollum(QtGui.QMainWindow):
                 print(os.path.split(filenames[i])[1])
                 function(filenames[i])
                 self.ringFinder(False)
-                corr = self.localCorr.reshape(*self.n)
-                corrArray[i] = corr
+#                corr = self.localCorr.reshape(*self.n)
+                corrArray[i] = self.localCorr
 
-                expanded = np.repeat(np.repeat(corr, m[1], axis=1),
-                                     m[0], axis=0)
+#                expanded = np.repeat(np.repeat(corr, m[1], axis=1),
+#                                     m[0], axis=0)
                 corrExp[i, self.crop:self.initShape[0] - self.crop,
-                        self.crop:self.initShape[1] - self.crop] = expanded
+                        self.crop:self.initShape[1] - self.crop] = self.localCorrBig
 
                 # Save correlation values array
                 corrName = utils.insertSuffix(filenames[i], '_correlation')
@@ -383,7 +395,7 @@ class Gollum(QtGui.QMainWindow):
             # plot histogram of the correlation values
             plotData = np.nan_to_num(corrArray.flatten())
             hRange = (0.0001, np.max(plotData))
-            y, x, _ = plt.hist(plotData, bins=30, range=hRange)
+            y, x, _ = plt.hist(plotData, bins=60, range=hRange)
             x = (x[1:] + x[:-1])/2
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
@@ -393,12 +405,13 @@ class Gollum(QtGui.QMainWindow):
             expected = (0.07, 0.03, np.max(y[:len(x)//2]),
                         0.15, 0.02, np.max(y[len(x)//2:]))
             params, cov = curve_fit(gaussians.bimodal, x, y, expected)
-            threshold = norm.ppf(0.95, *params[:2])
+            threshold = norm.ppf(0.90, *params[:2])
             ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
+            print('Rings threshold:', threshold)
+#            threshold = 0.1
 
             # Save boolean images (rings or no rings)
-            ringsArray = corrArray > ringsRatio
-            print(np.sum(ringsArray))
+            ringsArray = corrArray > threshold
             ringsExp = np.zeros((nfiles, self.initShape[0], self.initShape[1]),
                                 dtype=bool)
             for i in np.arange(len(filenames)):
@@ -407,7 +420,7 @@ class Gollum(QtGui.QMainWindow):
                 ringsExp[i, self.crop:self.initShape[0] - self.crop,
                          self.crop:self.initShape[1] - self.crop] = expanded
                 tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
-                            ringsExp[i].astype(np.uint16), software='Gollum',
+                            ringsExp[i].astype(np.single), software='Gollum',
                             imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
@@ -426,8 +439,8 @@ class Gollum(QtGui.QMainWindow):
             plt.savefig(os.path.join(path, folder + 'corr_hist'))
             plt.close()
 
-            np.save(os.path.join(path, 'histx'), x)
-            np.save(os.path.join(path, 'histy'), y)
+#            np.save(os.path.join(path, 'histx'), x)
+#            np.save(os.path.join(path, 'histy'), y)
 
         except IndexError:
             print("No file selected!")
