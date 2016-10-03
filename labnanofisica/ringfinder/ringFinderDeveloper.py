@@ -67,7 +67,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.corrThresEdit = QtGui.QLineEdit('0.07')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('20')
-        self.sinPowerEdit = QtGui.QLineEdit('3')
+        self.sinPowerEdit = QtGui.QLineEdit('2')
         self.loadimageButton = QtGui.QPushButton('Load Image')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
@@ -430,19 +430,22 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             inputDataS = ndi.gaussian_filter(self.inputData, self.gaussSigma)
             nblocks = np.array(inputDataS.shape)/self.n
             blocksInputS = tools.blockshaped(inputDataS, *nblocks)
+            blocksMask = tools.blockshaped(self.mask, *nblocks)
 
             neuron = np.zeros(len(self.blocksInput))
             thr = np.float(self.main.intThresEdit.text())
             threshold = self.meanS + thr*self.stdS
-            neuron = [np.any(b > threshold) for b in blocksInputS]
+            neuronTh = np.array([np.any(b > threshold) for b in blocksInputS])
+            neuronFrac = np.array([1 - np.sum(m)/np.size(m) > 0.3 for m in blocksMask])
+
+            neuron = neuronTh * neuronFrac
 
             # code for visualization of the output
-            neuron = np.array(neuron).reshape(*self.n)
+            neuron = neuron.reshape(*self.n)
             neuron = np.repeat(neuron, self.inputData.shape[0]/self.n[0], 0)
             neuron = np.repeat(neuron, self.inputData.shape[1]/self.n[1], 1)
             showIm = np.fliplr(np.transpose(neuron))
             self.thresBlockIm.setImage(100*showIm.astype(float))
-
             self.thresIm.setImage(100*self.showMask.astype(float))
 
         else:

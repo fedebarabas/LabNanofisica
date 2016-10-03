@@ -139,7 +139,7 @@ class Gollum(QtGui.QMainWindow):
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
         powLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.sinPowerEdit = QtGui.QLineEdit('3')
+        self.sinPowerEdit = QtGui.QLineEdit('2')
         wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -402,12 +402,12 @@ class Gollum(QtGui.QMainWindow):
             plt.ylabel("Frequency")
 
             # Bimodal fitting
-            expected = (0.07, 0.03, np.max(y[:len(x)//2]),
-                        0.15, 0.02, np.max(y[len(x)//2:]))
+            expected = (0.10, 0.05, np.max(y[:len(x)//2]),
+                        0.20, 0.05, np.max(y[len(x)//2:]))
             params, cov = curve_fit(gaussians.bimodal, x, y, expected)
             threshold = norm.ppf(0.90, *params[:2])
             ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
-            print('Rings threshold:', threshold)
+            print('Rings threshold:', np.round(threshold, 2))
 #            threshold = 0.1
 
             # Save boolean images (rings or no rings)
@@ -466,9 +466,14 @@ def chunkFinder(args):
         mask = blocksMask[i]
         rings = False
 
+        # Block may be excluded from the analysis for two reasons. Firstly,
+        # because the intensity for all its pixels may be too low. Secondly,
+        # because the part of the block that belongs to a neuron may be below
+        # an arbitrary 30% of the block.
         # We apply intensity threshold to smoothed data so we don't catch
         # tiny bright spots outside neurons
-        if np.any(blockS > meanS + intThres*stdS):
+        neuronFrac = 1 - np.sum(mask)/np.size(mask)
+        if np.any(blockS > meanS + intThres*stdS) and neuronFrac > 0.3:
             output = tools.corrMethod(block, mask, *cArgs)
             angle, corrTheta, corrMax, theta, phase, rings = output
 

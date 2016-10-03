@@ -228,10 +228,12 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                 # creates simulated axon
                 axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
                                     b=sinPow).data
-                axonTheta = np.ma.array(axonTheta, mask=mask)
+                axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
+                data = np.ma.array(data, mask=mask).filled(0)
 
                 # saves correlation for the given phase p
                 corrPhase[p] = pearson(data, axonTheta)
+#                print(axon)
 
             # saves the correlation for the best p, and given angle i
             corrTheta[t - 1] = np.max(corrPhase)
