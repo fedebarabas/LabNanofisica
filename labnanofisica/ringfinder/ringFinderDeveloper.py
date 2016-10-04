@@ -7,13 +7,7 @@ Created on Wed Oct  1 13:41:48 2014
 
 import os
 import numpy as np
-
 from scipy import ndimage as ndi
-try:
-    import skimage.filters as filters
-except ImportError:
-    import skimage.filter as filters
-
 from PIL import Image
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
@@ -47,20 +41,16 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
         self.STORMPxEdit = QtGui.QLineEdit('6.65')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
-        excludedLabel = QtGui.QLabel('#Excluded px from localization')
-        loadLayout.addWidget(excludedLabel, 2, 0)
-        self.excludedEdit = QtGui.QLineEdit('3')
-        loadLayout.addWidget(self.excludedEdit, 2, 1)
-        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 3, 0)
+        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
         self.magnificationEdit = QtGui.QLineEdit('20')
-        loadLayout.addWidget(self.magnificationEdit, 3, 1)
+        loadLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
-        loadLayout.addWidget(self.loadSTORMButton, 4, 0, 1, 2)
-        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 5, 0)
+        loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
+        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 4, 0)
         self.STEDPxEdit = QtGui.QLineEdit('20')
-        loadLayout.addWidget(self.STEDPxEdit, 5, 1)
+        loadLayout.addWidget(self.STEDPxEdit, 4, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
-        loadLayout.addWidget(self.loadSTEDButton, 6, 0, 1, 2)
+        loadLayout.addWidget(self.loadSTEDButton, 5, 0, 1, 2)
         loadFrame.setFixedHeight(200)
 
         # Ring finding method settings
@@ -309,11 +299,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
-        # Therefore we need to crop those borders before running the analysis.
-        nExcluded = np.float(self.main.excludedEdit.text())
+        # Therefore we need to crop those 3px borders before running the
+        # analysis.
         mag = np.float(self.main.magnificationEdit.text())
         load = self.loadImage('STORM', np.float(self.main.STORMPxEdit.text()),
-                              crop=nExcluded*mag, filename=filename)
+                              crop=3*mag, filename=filename)
         if load:
             self.inputImgHist.setLevels(0, 0.5)
             self.main.sigmaEdit.setText('150')
@@ -329,8 +319,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.showImS = np.fliplr(np.transpose(self.inputDataS))
 
         # binarization of image
-#        thresh = filters.threshold_otsu(self.inputDataS)
-#        self.mask = self.inputDataS < thresh
         thr = np.float(self.main.intThresEdit.text())
         self.mask = self.inputDataS < self.meanS + thr*self.stdS
         self.showMask = np.fliplr(np.transpose(self.mask))
@@ -444,10 +432,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             neuron = np.zeros(len(self.blocksInput))
             thr = np.float(self.main.intThresEdit.text())
             threshold = self.meanS + thr*self.stdS
-            neuronTh = np.array([np.any(b > threshold) for b in blocksInputS])
-            neuronFrac = np.array([1 - np.sum(m)/np.size(m) > 0.25 for m in blocksMask])
+            neuronTh = [np.any(b > threshold) for b in blocksInputS]
+            neuronFrac = [1 - np.sum(m)/np.size(m) > 0.25 for m in blocksMask]
 
-            neuron = neuronTh * neuronFrac
+            neuron = np.array(neuronTh) * np.array(neuronFrac)
 
             # code for visualization of the output
             neuron = neuron.reshape(*self.n)

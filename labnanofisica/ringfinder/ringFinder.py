@@ -11,13 +11,8 @@ import numpy as np
 from scipy import ndimage as ndi
 from scipy.optimize import curve_fit
 from scipy.stats import norm
-try:
-    import skimage.filters as filters
-except ImportError:
-    import skimage.filter as filters
 import tifffile as tiff
 import multiprocessing as mp
-
 from PIL import Image
 import matplotlib.pyplot as plt
 import pyqtgraph as pg
@@ -65,15 +60,13 @@ class Gollum(QtGui.QMainWindow):
 
         # input, output and buttons widgets
         self.inputWidget = pg.GraphicsLayoutWidget()
-        self.outputWidget = pg.GraphicsLayoutWidget()
         self.buttonWidget = QtGui.QWidget()
 
         # layout of the three widgets
         self.mainLayout.addWidget(self.inputWidget, 0, 1)
-        self.mainLayout.addWidget(self.outputWidget, 0, 2)
         self.mainLayout.addWidget(self.buttonWidget, 0, 0)
         self.mainLayout.setColumnMinimumWidth(1, 600)
-        self.mainLayout.setColumnMinimumWidth(2, 600)
+        self.buttonWidget.setFixedWidth(250)
 
         self.inputImgItem = pg.ImageItem()
         self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
@@ -86,19 +79,8 @@ class Gollum(QtGui.QMainWindow):
         self.inputImgHist.vb.setLimits(yMin=0, yMax=20000)
         self.inputWidget.addItem(self.inputImgHist)
 
-        self.outputImg = pg.ImageItem()
-        self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
-        self.outputVb.setAspectLocked(True)
-        self.outputVb.addItem(self.outputImg)
-
-        self.outputImgHist = pg.HistogramLUTItem()
-        self.outputImgHist.gradient.loadPreset('thermal')
-        self.outputImgHist.setImageItem(self.outputImg)
-        self.outputImgHist.vb.setLimits(yMin=0, yMax=20000)
-        self.outputWidget.addItem(self.outputImgHist)
-
         self.outputResult = pg.ImageItem()
-        self.outputVb.addItem(self.outputResult)
+        self.inputVb.addItem(self.outputResult)
 
         # Separate frame for loading controls
         loadFrame = QtGui.QFrame(self)
@@ -111,22 +93,18 @@ class Gollum(QtGui.QMainWindow):
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
         self.STORMPxEdit = QtGui.QLineEdit('6.65')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
-        excludedLabel = QtGui.QLabel('#Excluded px from localization')
-        loadLayout.addWidget(excludedLabel, 2, 0)
-        self.excludedEdit = QtGui.QLineEdit('3')
-        loadLayout.addWidget(self.excludedEdit, 2, 1)
-        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 3, 0)
+        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
         self.magnificationEdit = QtGui.QLineEdit('20')
-        loadLayout.addWidget(self.magnificationEdit, 3, 1)
+        loadLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
-        loadLayout.addWidget(self.loadSTORMButton, 4, 0, 1, 2)
-        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 5, 0)
+        loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
+        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 4, 0)
         self.STEDPxEdit = QtGui.QLineEdit('20')
-        loadLayout.addWidget(self.STEDPxEdit, 5, 1)
+        loadLayout.addWidget(self.STEDPxEdit, 4, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
-        loadLayout.addWidget(self.loadSTEDButton, 6, 0, 1, 2)
+        loadLayout.addWidget(self.loadSTEDButton, 5, 0, 1, 2)
         loadLayout.setColumnMinimumWidth(1, 40)
-        loadFrame.setFixedHeight(200)
+        loadFrame.setFixedHeight(180)
 
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
@@ -143,6 +121,7 @@ class Gollum(QtGui.QMainWindow):
         wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
+        self.corrButton.setCheckable(True)
         settingsFrame = QtGui.QFrame(self)
         settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
         settingsLayout = QtGui.QGridLayout()
@@ -195,11 +174,11 @@ class Gollum(QtGui.QMainWindow):
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
-        # Therefore we need to crop those borders before running the analysis.
-        nExcluded = np.float(self.excludedEdit.text())
+        # Therefore we need to crop those 3px borders before running the
+        # analysis.
         mag = np.float(self.magnificationEdit.text())
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
-                              crop=nExcluded*mag, filename=filename)
+                              crop=3*mag, filename=filename)
         if load:
             self.inputImgHist.setLevels(0, 0.5)
             self.sigmaEdit.setText('150')
@@ -222,8 +201,8 @@ class Gollum(QtGui.QMainWindow):
                 self.crop = np.int(crop)
                 self.pxSize = pxSize
                 self.inputVb.clear()
-                self.outputVb.clear()
-                self.outputImg.clear()
+#                self.outputVb.clear()
+#                self.outputImg.clear()
                 self.outputResult.clear()
 
                 im = Image.open(self.filename)
@@ -251,9 +230,9 @@ class Gollum(QtGui.QMainWindow):
                 self.dataMean = np.mean(self.inputData)
                 self.dataStd = np.std(self.inputData)
 
-                self.outputVb.addItem(self.outputImg)
-                self.outputWidget.addItem(self.outputImgHist)
-                self.outputVb.addItem(self.outputResult)
+#                self.outputVb.addItem(self.outputImg)
+#                self.outputWidget.addItem(self.outputImgHist)
+                self.inputVb.addItem(self.outputResult)
 
                 return True
 
@@ -273,90 +252,83 @@ class Gollum(QtGui.QMainWindow):
         self.showImS = np.fliplr(np.transpose(self.inputDataS))
 
         # binarization of image
-#        thresh = filters.threshold_otsu(self.inputDataS)
-#        self.mask = self.inputDataS < thresh
         thr = np.float(self.intThresEdit.text())
         self.mask = self.inputDataS < self.meanS + thr*self.stdS
         self.showMask = np.fliplr(np.transpose(self.mask))
 
-    def ringFinder(self, show=True):
+    def ringFinder(self, show=True, batch=False):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
 
-        # initialize variables
-        self.outputImg.clear()
-        self.outputResult.clear()
+        if self.corrButton.isChecked() or batch:
 
-        # m is such that the image has m x m subimages
-        m = self.n
+            # initialize variables
+            self.outputResult.clear()
 
-        # shape the data into the subimg that we need for the analysis
-        nblocks = np.array(self.inputData.shape)/m
-        blocksInput = tools.blockshaped(self.inputData, *nblocks)
-        blocksInputS = tools.blockshaped(self.inputDataS, *nblocks)
-        blocksMask = tools.blockshaped(self.mask, *nblocks)
+            # m is such that the image has m x m subimages
+            m = self.n
 
-        # for every subimg, we apply the correlation method for ring finding
-        intThres = np.float(self.intThresEdit.text())
-        corrThres = np.float(self.corrThresEdit.text())
-        minLen = np.float(self.lineLengthEdit.text())/self.pxSize
-        thetaStep = np.float(self.deltaAngleEdit.text())
-        deltaTh = np.float(self.deltaAngleEdit.text())
-        wvlen = np.float(self.wvlenEdit.text())/self.pxSize
-        sinPow = np.float(self.sinPowerEdit.text())
+            # shape the data into the subimg that we need for the analysis
+            nblocks = np.array(self.inputData.shape)/m
+            blocksInput = tools.blockshaped(self.inputData, *nblocks)
+            blocksInputS = tools.blockshaped(self.inputDataS, *nblocks)
+            blocksMask = tools.blockshaped(self.mask, *nblocks)
 
-        # Multi-core code
-        cpus = mp.cpu_count()
-        step = len(blocksInput) // cpus
-        chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
-        chunks[-1][1] = len(blocksInput)
-        # Correlation arguments
-        cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
-        # Finder arguments
-        fArg = self.meanS, self.stdS, intThres, cArgs
-        args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j], fArg]
-                for i, j in chunks]
-        pool = mp.Pool(processes=cpus)
-        results = pool.map(chunkFinder, args)
-        pool.close()
-        pool.join()
-        self.localCorr = np.nan_to_num(np.concatenate(results[:]))
-#        self.localCorr -= np.min(self.localCorr)
-        self.localCorr = self.localCorr.reshape(*self.n)
+            # for each subimg, we apply the correlation method for ring finding
+            intThres = np.float(self.intThresEdit.text())
+            corrThres = np.float(self.corrThresEdit.text())
+            minLen = np.float(self.lineLengthEdit.text())/self.pxSize
+            thetaStep = np.float(self.deltaAngleEdit.text())
+            deltaTh = np.float(self.deltaAngleEdit.text())
+            wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+            sinPow = np.float(self.sinPowerEdit.text())
 
-        # code for visualization of the output
-        mag = np.array(self.inputData.shape)/self.n
-        self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
-        self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
-        self.outputImg.setImage(np.fliplr(np.transpose(self.inputData)))
-        showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
-        self.outputResult.setImage(showIm)
-        self.outputResult.setZValue(10)     # make sure this image is on top
-        self.outputResult.setOpacity(0.5)
+            # Multi-core code
+            cpus = mp.cpu_count()
+            step = len(blocksInput) // cpus
+            chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
+            chunks[-1][1] = len(blocksInput)
+            # Correlation arguments
+            cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
+            # Finder arguments
+            fArg = self.meanS, self.stdS, intThres, cArgs
+            args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j],
+                     fArg] for i, j in chunks]
+            pool = mp.Pool(processes=cpus)
+            results = np.array(pool.map(chunkFinder, args))
+            pool.close()
+            pool.join()
+#            correlations, fractions = np.concatenate(results[:])
+            self.localCorr = np.nan_to_num(np.concatenate(results[:, 0]))
+            self.localCorr = self.localCorr.reshape(*self.n)
+            self.fractions = np.concatenate(results[:, 1]).reshape(*self.n)
 
-        self.outputVb.setLimits(xMin=-0.05*self.shape[0],
-                                xMax=1.05*self.shape[0], minXRange=4,
-                                yMin=-0.05*self.shape[1],
-                                yMax=1.05*self.shape[1], minYRange=4)
-        tools.Grid(self.outputVb, self.shape, self.n)
+            # code for visualization of the output
+            mag = np.array(self.inputData.shape)/self.n
+            self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
+            self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
+            showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
+            self.outputResult.setImage(showIm)
+            self.outputResult.setZValue(10)    # make sure this image is on top
+            self.outputResult.setOpacity(0.5)
 
-        if show:
-            plt.figure()
-            data = self.localCorr.reshape(*m)
-            data = np.rot90(data)
-            data = np.flipud(data)
-            heatmap = plt.pcolor(data)
+            if show:
+                plt.figure(figsize=(10, 8))
+                data = self.localCorr.reshape(*m)
+                data = np.fliplr(data)
+                heatmap = plt.pcolor(data)
 
-            for y in range(data.shape[0]):
-                for x in range(data.shape[1]):
-                    plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
-                             horizontalalignment='center',
-                             verticalalignment='center',)
+                for y in range(data.shape[0]):
+                    for x in range(data.shape[1]):
+                        plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
+                                 horizontalalignment='center',
+                                 verticalalignment='center',)
+                plt.colorbar(heatmap)
+                plt.show()
 
-            plt.colorbar(heatmap)
-
-            plt.show()
+        else:
+            self.outputResult.clear()
 
     def batch(self, function, tech):
         try:
@@ -366,6 +338,7 @@ class Gollum(QtGui.QMainWindow):
             nfiles = len(filenames)
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+            fractions = np.zeros((nfiles, self.n[0], self.n[1]))
 
             # Expand correlation array so it matches data shape
             m = self.shape/self.n
@@ -380,8 +353,9 @@ class Gollum(QtGui.QMainWindow):
             for i in np.arange(nfiles):
                 print(os.path.split(filenames[i])[1])
                 function(filenames[i])
-                self.ringFinder(False)
+                self.ringFinder(False, batch=True)
                 corrArray[i] = self.localCorr
+                fractions[i] = self.fractions
 
                 bound = (np.array(self.initShape) - self.crop).astype(np.int)
                 corrExp[i, self.crop:bound[0],
@@ -395,6 +369,16 @@ class Gollum(QtGui.QMainWindow):
                             metadata={'spacing': 1, 'unit': 'um'})
 
             print('Done in {0:.0f} seconds'.format(time.time() - t0))
+
+            plt.figure(figsize=(12, 8))
+            plt.plot(fractions.flatten(), corrArray.flatten(), 'b.')
+            plt.show()
+
+            # TODO: fitear esta relación, normalizar corrArray con fiteo
+
+            plt.figure(figsize=(12, 8))
+            plt.plot(fractions.flatten(), corrArray.flatten(), 'b.')
+            plt.show()
 
             # plot histogram of the correlation values
             corrArray = np.nan_to_num(corrArray)
@@ -410,9 +394,8 @@ class Gollum(QtGui.QMainWindow):
                         0.20, 0.05, np.max(y[len(x)//2:]))
             params, cov = curve_fit(gaussians.bimodal, x, y, expected)
             threshold = norm.ppf(0.90, *params[:2])
-            ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
             print('Rings threshold:', np.round(threshold, 2))
-#            threshold = 0.1
+#            ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
 
             # Save boolean images (rings or no rings)
             ringsArray = corrArray > threshold
@@ -463,6 +446,7 @@ def chunkFinder(args):
 #    cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
 
     localCorr = np.zeros(len(blocks))
+    fraction = np.zeros(len(blocks))
 
     for i in np.arange(len(blocks)):
         block = blocks[i]
@@ -486,7 +470,9 @@ def chunkFinder(args):
         else:
             localCorr[i] = None
 
-    return localCorr
+        fraction[i] = neuronFrac
+
+    return localCorr, fraction
 
 
 if __name__ == '__main__':
