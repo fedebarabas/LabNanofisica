@@ -58,6 +58,8 @@ def blockshaped(arr, nrows, ncols):
     each subblock preserving the "physical" layout of arr.
     """
     h, w = arr.shape
+    nrows = np.int(nrows)
+    ncols = np.int(ncols)
     return (arr.reshape(h//nrows, nrows, -1, ncols)
                .swapaxes(1, 2)
                .reshape(-1, nrows, ncols))

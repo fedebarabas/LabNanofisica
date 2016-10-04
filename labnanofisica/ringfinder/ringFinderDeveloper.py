@@ -67,14 +67,15 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.corrThresEdit = QtGui.QLineEdit('0.07')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('20')
-        self.sinPowerEdit = QtGui.QLineEdit('2')
+        self.sinPowerEdit = QtGui.QLineEdit('6')
         self.loadimageButton = QtGui.QPushButton('Load Image')
         self.filterImageButton = QtGui.QPushButton('Filter Image')
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
         self.sigmaEdit = QtGui.QLineEdit('150')
-        self.intThrButton = QtGui.QPushButton('Intensity threshold')
+        text = 'Intensity and neuron content discrimination'
+        self.intThrButton = QtGui.QPushButton(text)
         self.intThrButton.setCheckable(True)
         self.intThresEdit = QtGui.QLineEdit('0.5')
         self.lineLengthEdit = QtGui.QLineEdit('300')
@@ -242,10 +243,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
         self.roi.sigRegionChanged.connect(self.updatePlot)
 
-    def loadImage(self, pxSize, crop=0, filename=None):
+    def loadImage(self, tech, pxSize, crop=0, filename=None):
 
         if not(isinstance(filename, str)):
-            self.filename = utils.getFilename("Load image",
+            self.filename = utils.getFilename('Load ' + tech + ' image',
                                               [('Tiff file', '.tif')],
                                               self.initialdir)
         else:
@@ -299,8 +300,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             return False
 
     def loadSTED(self, filename=None):
-        self.loadImage(np.float(self.main.STEDPxEdit.text()),
-                       filename=filename)
+        load = self.loadImage('STED', np.float(self.main.STEDPxEdit.text()),
+                              filename=filename)
+        if load:
+            self.main.sigmaEdit.setText('100')
+            self.main.intThresEdit.setText('0.1')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -308,10 +312,12 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # Therefore we need to crop those borders before running the analysis.
         nExcluded = np.float(self.main.excludedEdit.text())
         mag = np.float(self.main.magnificationEdit.text())
-        load = self.loadImage(np.float(self.main.STORMPxEdit.text()),
+        load = self.loadImage('STORM', np.float(self.main.STORMPxEdit.text()),
                               crop=nExcluded*mag, filename=filename)
         if load:
             self.inputImgHist.setLevels(0, 0.5)
+            self.main.sigmaEdit.setText('150')
+            self.main.intThresEdit.setText('0.5')
 
     def updateImage(self):
         self.gaussSigma = np.float(self.main.sigmaEdit.text())/self.pxSize
@@ -393,19 +399,22 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                 theta = np.arange(np.min([self.th0 - deltaTh, 0]), 180, thStep)
                 pen1 = pg.mkPen(color=(0, 255, 100), width=2,
                                 style=QtCore.Qt.SolidLine, antialias=True)
-                pen2 = pg.mkPen(color=(255, 50, 60), width=1,
-                                style=QtCore.Qt.SolidLine, antialias=True)
+#                pen2 = pg.mkPen(color=(255, 50, 60), width=1,
+#                                style=QtCore.Qt.SolidLine, antialias=True)
                 self.pCorr.plot(theta, corrTheta, pen=pen1)
-                self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)),
-                                pen=pen2)
+#                self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)),
+#                                pen=pen2)
 
                 # plot the area within deltaTh from the found direction
                 if self.th0 is not None:
                     thArea = np.arange(self.th0 - deltaTh, self.th0 + deltaTh)
                     if self.th0 < 0:
                         thArea += 180
-                    self.pCorr.plot(thArea, 0.2*np.ones(len(thArea)),
-                                    fillLevel=0, brush=(50, 50, 200, 100))
+                    gap = 0.05*(np.max(corrTheta) - np.min(corrTheta))
+                    brushMax = np.max(corrTheta)*np.ones(len(thArea)) + gap
+                    brushMin = np.min(corrTheta) - gap
+                    self.pCorr.plot(thArea, brushMax, fillLevel=brushMin,
+                                    fillBrush=(50, 50, 200, 100), pen=None)
 
             if rings and np.abs(self.th0 - thetaMax) <= deltaTh:
                 self.main.resultLabel.setText('<strong>MY PRECIOUS!<\strong>')
@@ -436,7 +445,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             thr = np.float(self.main.intThresEdit.text())
             threshold = self.meanS + thr*self.stdS
             neuronTh = np.array([np.any(b > threshold) for b in blocksInputS])
-            neuronFrac = np.array([1 - np.sum(m)/np.size(m) > 0.3 for m in blocksMask])
+            neuronFrac = np.array([1 - np.sum(m)/np.size(m) > 0.25 for m in blocksMask])
 
             neuron = neuronTh * neuronFrac
 

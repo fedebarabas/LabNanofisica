@@ -139,7 +139,7 @@ class Gollum(QtGui.QMainWindow):
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
         powLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.sinPowerEdit = QtGui.QLineEdit('2')
+        self.sinPowerEdit = QtGui.QLineEdit('6')
         wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -186,8 +186,11 @@ class Gollum(QtGui.QMainWindow):
                                    'ringfinder', 'spectrinSTED.tif'))
 
     def loadSTED(self, filename=None):
-        self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
-                       filename=filename)
+        load = self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
+                              filename=filename)
+        if load:
+            self.sigmaEdit.setText('100')
+            self.intThresEdit.setText('0.1')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -198,7 +201,9 @@ class Gollum(QtGui.QMainWindow):
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
                               crop=nExcluded*mag, filename=filename)
         if load:
-            self.inputImgHist.setLevels(0, 0.3)
+            self.inputImgHist.setLevels(0, 0.5)
+            self.sigmaEdit.setText('150')
+            self.intThresEdit.setText('0.5')
 
     def loadImage(self, pxSize, tt, crop=0, filename=None):
 
@@ -214,7 +219,7 @@ class Gollum(QtGui.QMainWindow):
             if self.filename is not None:
 
                 self.initialdir = os.path.split(self.filename)[0]
-                self.crop = crop
+                self.crop = np.int(crop)
                 self.pxSize = pxSize
                 self.inputVb.clear()
                 self.outputVb.clear()
@@ -224,8 +229,9 @@ class Gollum(QtGui.QMainWindow):
                 im = Image.open(self.filename)
                 self.inputData = np.array(im).astype(np.float64)
                 self.initShape = self.inputData.shape
-                self.inputData = self.inputData[crop:self.initShape[0] - crop,
-                                                crop:self.initShape[1] - crop]
+                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+                self.inputData = self.inputData[self.crop:bound[0],
+                                                self.crop:bound[1]]
                 self.shape = self.inputData.shape
                 self.updateImage()
                 self.inputVb.addItem(self.inputImgItem)
@@ -315,11 +321,11 @@ class Gollum(QtGui.QMainWindow):
         results = pool.map(chunkFinder, args)
         pool.close()
         pool.join()
-        self.localCorr = np.concatenate(results[:])
+        self.localCorr = np.nan_to_num(np.concatenate(results[:]))
+#        self.localCorr -= np.min(self.localCorr)
+        self.localCorr = self.localCorr.reshape(*self.n)
 
         # code for visualization of the output
-        self.localCorr = np.array(self.localCorr).reshape(*self.n)
-        self.localCorr = np.nan_to_num(self.localCorr)
         mag = np.array(self.inputData.shape)/self.n
         self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
         self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
@@ -352,9 +358,9 @@ class Gollum(QtGui.QMainWindow):
 
             plt.show()
 
-    def batch(self, function):
+    def batch(self, function, tech):
         try:
-            filenames = utils.getFilenames("Load images",
+            filenames = utils.getFilenames('Load ' + tech + ' images',
                                            [('Tiff file', '.tif')],
                                            self.initialdir)
             nfiles = len(filenames)
@@ -375,13 +381,11 @@ class Gollum(QtGui.QMainWindow):
                 print(os.path.split(filenames[i])[1])
                 function(filenames[i])
                 self.ringFinder(False)
-#                corr = self.localCorr.reshape(*self.n)
                 corrArray[i] = self.localCorr
 
-#                expanded = np.repeat(np.repeat(corr, m[1], axis=1),
-#                                     m[0], axis=0)
-                corrExp[i, self.crop:self.initShape[0] - self.crop,
-                        self.crop:self.initShape[1] - self.crop] = self.localCorrBig
+                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+                corrExp[i, self.crop:bound[0],
+                        self.crop:bound[1]] = self.localCorrBig
 
                 # Save correlation values array
                 corrName = utils.insertSuffix(filenames[i], '_correlation')
@@ -393,9 +397,9 @@ class Gollum(QtGui.QMainWindow):
             print('Done in {0:.0f} seconds'.format(time.time() - t0))
 
             # plot histogram of the correlation values
-            plotData = np.nan_to_num(corrArray.flatten())
-            hRange = (0.0001, np.max(plotData))
-            y, x, _ = plt.hist(plotData, bins=60, range=hRange)
+            corrArray = np.nan_to_num(corrArray)
+            hRange = (0.0001, np.max(corrArray))
+            y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hRange)
             x = (x[1:] + x[:-1])/2
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
@@ -446,10 +450,10 @@ class Gollum(QtGui.QMainWindow):
             print("No file selected!")
 
     def batchSTORM(self):
-        self.batch(self.loadSTORM)
+        self.batch(self.loadSTORM, 'STORM')
 
     def batchSTED(self):
-        self.batch(self.loadSTED)
+        self.batch(self.loadSTED, 'STED')
 
 
 def chunkFinder(args):
@@ -473,7 +477,7 @@ def chunkFinder(args):
         # We apply intensity threshold to smoothed data so we don't catch
         # tiny bright spots outside neurons
         neuronFrac = 1 - np.sum(mask)/np.size(mask)
-        if np.any(blockS > meanS + intThres*stdS) and neuronFrac > 0.3:
+        if np.any(blockS > meanS + intThres*stdS) and neuronFrac > 0.25:
             output = tools.corrMethod(block, mask, *cArgs)
             angle, corrTheta, corrMax, theta, phase, rings = output
 
