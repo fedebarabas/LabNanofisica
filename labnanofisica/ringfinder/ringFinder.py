@@ -296,13 +296,11 @@ class Gollum(QtGui.QMainWindow):
             args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j],
                      fArg] for i, j in chunks]
             pool = mp.Pool(processes=cpus)
-            results = np.array(pool.map(chunkFinder, args))
+            results = pool.map(chunkFinder, args)
             pool.close()
             pool.join()
-#            correlations, fractions = np.concatenate(results[:])
-            self.localCorr = np.nan_to_num(np.concatenate(results[:, 0]))
+            self.localCorr = np.nan_to_num(np.concatenate(results[:]))
             self.localCorr = self.localCorr.reshape(*self.n)
-            self.fractions = np.concatenate(results[:, 1]).reshape(*self.n)
 
             # code for visualization of the output
             mag = np.array(self.inputData.shape)/self.n
@@ -338,7 +336,6 @@ class Gollum(QtGui.QMainWindow):
             nfiles = len(filenames)
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-            fractions = np.zeros((nfiles, self.n[0], self.n[1]))
 
             # Expand correlation array so it matches data shape
             m = self.shape/self.n
@@ -355,7 +352,6 @@ class Gollum(QtGui.QMainWindow):
                 function(filenames[i])
                 self.ringFinder(False, batch=True)
                 corrArray[i] = self.localCorr
-                fractions[i] = self.fractions
 
                 bound = (np.array(self.initShape) - self.crop).astype(np.int)
                 corrExp[i, self.crop:bound[0],
@@ -370,59 +366,60 @@ class Gollum(QtGui.QMainWindow):
 
             print('Done in {0:.0f} seconds'.format(time.time() - t0))
 
-            plt.figure(figsize=(12, 8))
-            plt.plot(fractions.flatten(), corrArray.flatten(), 'b.')
-            plt.show()
-
-            # TODO: fitear esta relación, normalizar corrArray con fiteo
-
-            plt.figure(figsize=(12, 8))
-            plt.plot(fractions.flatten(), corrArray.flatten(), 'b.')
-            plt.show()
+            corrArray = np.nan_to_num(corrArray)
 
             # plot histogram of the correlation values
-            corrArray = np.nan_to_num(corrArray)
             hRange = (0.0001, np.max(corrArray))
             y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hRange)
             x = (x[1:] + x[:-1])/2
-            plt.title("Correlations Histogram")
-            plt.xlabel("Value")
-            plt.ylabel("Frequency")
 
-            # Bimodal fitting
-            expected = (0.10, 0.05, np.max(y[:len(x)//2]),
-                        0.20, 0.05, np.max(y[len(x)//2:]))
-            params, cov = curve_fit(gaussians.bimodal, x, y, expected)
-            threshold = norm.ppf(0.90, *params[:2])
-            print('Rings threshold:', np.round(threshold, 2))
+#            # Bimodal fitting
+#            expected = (0.10, 0.05, np.max(y[:len(x)//2]),
+#                        0.20, 0.05, np.max(y[len(x)//2:]))
+#            params, cov = curve_fit(gaussians.bimodal, x, y, expected)
+#            threshold = norm.ppf(0.90, *params[:2])
+#            print('Rings threshold:', np.round(threshold, 2))
 #            ringsRatio = np.sum(y[x > threshold]) / np.sum(y)
 
             # Save boolean images (rings or no rings)
-            ringsArray = corrArray > threshold
-            ringsExp = np.zeros((nfiles, self.initShape[0], self.initShape[1]),
-                                dtype=bool)
+#            ringsArray = corrArray > threshold
+#            ringsExp = np.zeros((nfiles, self.initShape[0], self.initShape[1]),
+#                                dtype=bool)
+            corrExp = np.zeros((nfiles, self.initShape[0], self.initShape[1]))
             for i in np.arange(len(filenames)):
-                expanded = np.repeat(np.repeat(ringsArray[i], m[1], axis=1),
+                expanded = np.repeat(np.repeat(corrArray[i], m[1], axis=1),
                                      m[0], axis=0)
-                ringsExp[i, self.crop:self.initShape[0] - self.crop,
-                         self.crop:self.initShape[1] - self.crop] = expanded
-                tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
-                            ringsExp[i].astype(np.single), software='Gollum',
+                corrExp[i, self.crop:self.initShape[0] - self.crop,
+                        self.crop:self.initShape[1] - self.crop] = expanded
+                tiff.imsave(utils.insertSuffix(filenames[i],
+                                               '_correlation_norm'),
+                            corrExp[i].astype(np.single), software='Gollum',
                             imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
+#                expanded = np.repeat(np.repeat(ringsArray[i], m[1], axis=1),
+#                                     m[0], axis=0)
+#                ringsExp[i, self.crop:self.initShape[0] - self.crop,
+#                         self.crop:self.initShape[1] - self.crop] = expanded
+#                tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
+#                            ringsExp[i].astype(np.single), software='Gollum',
+#                            imagej=True,
+#                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+#                            metadata={'spacing': 1, 'unit': 'um'})
 
             # Plotting
             plt.figure(0)
             plt.bar(x, y, align='center', width=(x[1] - x[0]))
-            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,
-                     label='model')
-            plt.plot(x, gaussians.gauss(x, *params[:3]), color='green', lw=3,
-                     label='no rings')
-            plt.plot(x, gaussians.gauss(x, *params[-3:]), color='black', lw=3,
-                     label='rings')
-            plt.legend()
-
+#            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,
+#                     label='model')
+#            plt.plot(x, gaussians.gauss(x, *params[:3]), color='green', lw=3,
+#                     label='no rings')
+#            plt.plot(x, gaussians.gauss(x, *params[-3:]), color='black', lw=3,
+#                     label='rings')
+#            plt.legend()
+            plt.title("Correlations Histogram")
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
             plt.savefig(os.path.join(path, folder + 'corr_hist'))
             plt.close()
 
@@ -446,7 +443,6 @@ def chunkFinder(args):
 #    cArgs = corrThres, sigma, minLen, thetaStep, deltaTh, wvlen, sinPow
 
     localCorr = np.zeros(len(blocks))
-    fraction = np.zeros(len(blocks))
 
     for i in np.arange(len(blocks)):
         block = blocks[i]
@@ -467,12 +463,11 @@ def chunkFinder(args):
 
             # Store results
             localCorr[i] = corrMax
+
         else:
             localCorr[i] = None
 
-        fraction[i] = neuronFrac
-
-    return localCorr, fraction
+    return localCorr
 
 
 if __name__ == '__main__':
