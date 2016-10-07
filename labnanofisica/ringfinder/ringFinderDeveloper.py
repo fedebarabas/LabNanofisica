@@ -51,7 +51,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadLayout.addWidget(self.STEDPxEdit, 4, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
         loadLayout.addWidget(self.loadSTEDButton, 5, 0, 1, 2)
-        loadFrame.setFixedHeight(200)
+        loadFrame.setFixedHeight(180)
 
         # Ring finding method settings
         self.corrThresEdit = QtGui.QLineEdit('0.07')
@@ -118,7 +118,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         settingsLayout.addWidget(self.deltaThEdit, 12, 1)
         settingsLayout.addWidget(self.corrButton, 13, 0, 1, 2)
         settingsLayout.addWidget(self.resultLabel, 14, 0, 2, 0)
-        settingsFrame.setFixedHeight(400)
+        settingsFrame.setFixedHeight(380)
 
         buttonWidget = QtGui.QWidget()
         buttonsLayout = QtGui.QGridLayout()

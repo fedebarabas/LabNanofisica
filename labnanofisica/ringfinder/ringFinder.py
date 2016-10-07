@@ -197,12 +197,12 @@ class Gollum(QtGui.QMainWindow):
 
             if self.filename is not None:
 
+                self.corrButton.setChecked(False)
+
                 self.initialdir = os.path.split(self.filename)[0]
                 self.crop = np.int(crop)
                 self.pxSize = pxSize
                 self.inputVb.clear()
-#                self.outputVb.clear()
-#                self.outputImg.clear()
                 self.outputResult.clear()
 
                 im = Image.open(self.filename)
@@ -299,7 +299,7 @@ class Gollum(QtGui.QMainWindow):
             results = pool.map(chunkFinder, args)
             pool.close()
             pool.join()
-            self.localCorr = np.nan_to_num(np.concatenate(results[:]))
+            self.localCorr = np.concatenate(results[:])
             self.localCorr = self.localCorr.reshape(*self.n)
 
             # code for visualization of the output
@@ -307,7 +307,7 @@ class Gollum(QtGui.QMainWindow):
             self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
             self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
             showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
-            self.outputResult.setImage(showIm)
+            self.outputResult.setImage(np.nan_to_num(showIm))
             self.outputResult.setZValue(10)    # make sure this image is on top
             self.outputResult.setOpacity(0.5)
 
@@ -315,8 +315,8 @@ class Gollum(QtGui.QMainWindow):
                 plt.figure(figsize=(10, 8))
                 data = self.localCorr.reshape(*m)
                 data = np.fliplr(data)
-                heatmap = plt.pcolor(data)
-
+                maskedData = np.ma.array(data, mask=np.isnan(data))
+                heatmap = plt.pcolor(maskedData, cmap='inferno')
                 for y in range(data.shape[0]):
                     for x in range(data.shape[1]):
                         plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
@@ -341,7 +341,7 @@ class Gollum(QtGui.QMainWindow):
             m = self.shape/self.n
             corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
                                dtype=np.single)
-            corrExp[:] = np.NAN
+            corrExp[:] = np.nan
 
             path = os.path.split(filenames[0])[0]
             folder = os.path.split(path)[1]
@@ -366,11 +366,9 @@ class Gollum(QtGui.QMainWindow):
 
             print('Done in {0:.0f} seconds'.format(time.time() - t0))
 
-            corrArray = np.nan_to_num(corrArray)
-
             # plot histogram of the correlation values
-            hRange = (0.0001, np.max(corrArray))
-            y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hRange)
+            y, x, _ = plt.hist(corrArray.flatten(), bins=60,
+                               range=(0, np.max(np.nan_to_num(corrArray))))
             x = (x[1:] + x[:-1])/2
 
 #            # Bimodal fitting
@@ -437,6 +435,9 @@ class Gollum(QtGui.QMainWindow):
 
 
 def chunkFinder(args):
+    '''
+    result = 0 means there's a neuron in the block but no rings are found
+    result = np.nan means there's no neuron in the block. '''
 
     blocks, blocksS, blocksMask, fArgs = args
     meanS, stdS, intThres, cArgs = fArgs
@@ -465,7 +466,7 @@ def chunkFinder(args):
             localCorr[i] = corrMax
 
         else:
-            localCorr[i] = None
+            localCorr[i] = np.nan
 
     return localCorr
 

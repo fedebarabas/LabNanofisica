@@ -200,15 +200,30 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
     phaseMax: simulated axon's phase with maximum correlation value at thetaMax
     rings (bool): ring presence"""
 
+    # phase steps are set to 20, TO DO: explore this parameter
+    phase = np.arange(0, 21, 1)
+
+    corrPhase = np.zeros(np.size(phase))
+
     neuronFrac = 1 - np.sum(mask)/np.size(mask)
 
     # line angle calculated
     th0, lines = getDirection(data, np.invert(mask), minLen, developer)
 
     if th0 is None:
-        return th0, None, None, None, None, False
+
+        theta = np.arange(0, 180, thStep)
+
+        # result = 0 means there's a neuron in the block but no rings are found
+        # result = np.nan means there's no neuron in the block
+        corrPhaseArg = np.zeros(np.size(theta))
+        corrTheta = np.zeros(np.size(theta))
+        corrMax = 0
+        thetaMax = 0
+        phaseMax = 0
+        rings = False
+
     else:
-        subImgSize = np.shape(data)[0]
 
         # set the angle range to look for a correlation, 179 is added
         # because of later corrAngle's expansion
@@ -217,12 +232,10 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
         else:
             theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
 
-        # phase steps are set to 20, TO DO: explore this parameter
-        phase = np.arange(0, 21, 1)
-
-        corrPhase = np.zeros(np.size(phase))
         corrPhaseArg = np.zeros(np.size(theta))
         corrTheta = np.zeros(np.size(theta))
+
+        subImgSize = np.shape(data)[0]
 
         # for now we correlate with the full sin2D pattern
         for t in np.arange(len(theta)):
@@ -250,7 +263,8 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
         corrMax = np.max(corrTheta[ix])
 
         rings = corrMax > thres
-        return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
+
+    return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
 
 
 def FFTMethod(data, thres=0.4):
