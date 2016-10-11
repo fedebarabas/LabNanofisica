@@ -91,10 +91,10 @@ class Gollum(QtGui.QMainWindow):
         loadTitle.setTextFormat(QtCore.Qt.RichText)
         loadLayout.addWidget(loadTitle, 0, 0)
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
-        self.STORMPxEdit = QtGui.QLineEdit('6.65')
+        self.STORMPxEdit = QtGui.QLineEdit('13.3')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
         loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
-        self.magnificationEdit = QtGui.QLineEdit('20')
+        self.magnificationEdit = QtGui.QLineEdit('10')
         loadLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
         loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
@@ -180,7 +180,7 @@ class Gollum(QtGui.QMainWindow):
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
                               crop=3*mag, filename=filename)
         if load:
-            self.inputImgHist.setLevels(0, 0.5)
+            self.inputImgHist.setLevels(0, 3)
             self.sigmaEdit.setText('150')
             self.intThresEdit.setText('0.5')
 
@@ -276,7 +276,7 @@ class Gollum(QtGui.QMainWindow):
             blocksMask = tools.blockshaped(self.mask, *nblocks)
 
             # for each subimg, we apply the correlation method for ring finding
-            intThres = np.float(self.intThresEdit.text())
+            intThr = np.float(self.intThresEdit.text())
             corrThres = np.float(self.corrThresEdit.text())
             minLen = np.float(self.lineLengthEdit.text())/self.pxSize
             thetaStep = np.float(self.deltaAngleEdit.text())
@@ -285,6 +285,7 @@ class Gollum(QtGui.QMainWindow):
             sinPow = np.float(self.sinPowerEdit.text())
 
             # Multi-core code
+            ###
             cpus = mp.cpu_count()
             step = len(blocksInput) // cpus
             chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
@@ -292,7 +293,7 @@ class Gollum(QtGui.QMainWindow):
             # Correlation arguments
             cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
             # Finder arguments
-            fArg = self.meanS, self.stdS, intThres, cArgs
+            fArg = self.meanS, self.stdS, intThr, cArgs
             args = [[blocksInput[i:j], blocksInputS[i:j], blocksMask[i:j],
                      fArg] for i, j in chunks]
             pool = mp.Pool(processes=cpus)
@@ -300,6 +301,41 @@ class Gollum(QtGui.QMainWindow):
             pool.close()
             pool.join()
             self.localCorr = np.concatenate(results[:])
+            ###
+
+#            # Single-core code
+#            ###
+#            self.localCorr = np.zeros(len(blocksInput))
+#            cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
+#            for i in np.arange(len(blocksInput)):
+#                rings = False
+#                block = blocksInput[i]
+#                blockS = blocksInputS[i]
+#                mask = blocksMask[i]
+#
+#                if i == 0:
+#                    plt.imshow(block)
+#                    plt.show()
+#
+#                # Block may be excluded from the analysis for two reasons.
+#                # Firstly, because the intensity for all its pixels may be too
+#                # low. Secondly, because the part of the block that belongs to
+#                # a neuron may be below an arbitrary 30% of the block.
+#                # We apply intensity threshold to smoothed data so we don't
+#                # catch tiny bright spots outside neurons
+#                neuronFrac = 1 - np.sum(mask)/np.size(mask)
+#                thres = self.meanS + intThr*self.stdS
+#                if np.any(blockS > thres) and neuronFrac > 0.25:
+#                    output = tools.corrMethod(block, mask, *cArgs)
+#                    angle, corrTheta, corrMax, theta, phase, rings = output
+#
+#                    # Store results
+#                    self.localCorr[i] = corrMax
+#                else:
+#                    self.localCorr[i] = np.nan
+#
+#            ###
+
             self.localCorr = self.localCorr.reshape(*self.n)
 
             # code for visualization of the output
@@ -314,7 +350,7 @@ class Gollum(QtGui.QMainWindow):
             if show:
                 plt.figure(figsize=(10, 8))
                 data = self.localCorr.reshape(*m)
-                data = np.fliplr(data)
+                data = np.flipud(data)
                 maskedData = np.ma.array(data, mask=np.isnan(data))
                 heatmap = plt.pcolor(maskedData, cmap='inferno')
                 for y in range(data.shape[0]):

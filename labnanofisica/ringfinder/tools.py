@@ -108,29 +108,21 @@ def getDirection(data, binary, minLen, debug=False):
 
     th0, sigmaTh, lines = linesFromBinary(binary, minLen, debug)
     if debug:
-        print('sigma1', np.round(sigmaTh, 2))
+        text = 'Angle = {0:.1f} +- {1:.1f} from {2:.0f} lines'
+        print(text.format(th0, sigmaTh, len(lines)))
 
     try:
 
         if len(lines) > 1:
 
-            # if the std is too high it's probably the case of flat angles,
-            # i.e., 181, -2, 0.3, -1, 179
             # TO DO: find optimal threshold, 20 is arbitrary
-            if sigmaTh > 20:
-                if debug:
-                    print('sigmaTh too high, will rotate data and try again')
-                th0, sigmaTh, lines = linesFromBinary(np.rot90(binary), minLen)
-                if debug:
-                    print('sigma2', np.round(sigmaTh, 2))
-                if sigmaTh < 20:
-                    return th0 - 90, lines
-                else:
-                    if debug:
-                        print('sigmaTh too high in both directions')
-                    return None, lines
-            else:
+            if sigmaTh < 15:
                 return th0, lines
+            else:
+                if debug:
+                    print('sigmaTh too high')
+                return None, lines
+
         else:
             if debug:
                 print('Only one line found')
@@ -150,31 +142,40 @@ def linesFromBinary(binaryData, minLen, debug=False):
     lines = probabilistic_hough_line(edges, threshold=10, line_length=minLen,
                                      line_gap=3)
 
-    # allocate angleArr which will have the angles of the lines
-    angleArr = []
-
     if lines == []:
         if debug:
             print('No lines detected with Hough line algorithm')
         return None, None, lines
 
     else:
-        for line in lines:
-            p0, p1 = line
+        angleArr = np.zeros(len(lines))
+        for l in np.arange(len(lines)):
+            p0, p1 = lines[l]
 
             # get the m coefficient of the lines and the angle
-            if p1[1] == p0[1]:
-                angle = 90
-            else:
+            try:
                 m = (p1[0] - p0[0])/(p1[1] - p0[1])
                 angle = (180/np.pi)*np.arctan(m)
+            except ZeroDivisionError:
+                angle = 90
 
-            angleArr.append(angle)
+            angleArr[l] = angle
 
-        # calculate mean angle and its standard deviation
-#        print('angleArr is {}'.format(np.around(angleArr, 1)))
+        # Before calculating the mean angle, we have to make sure we're using
+        # the same quadrant for all the angles. We refer all the angles to the
+        # first one
+        opt = np.array([180, 0, -180])
+        for i in np.arange(1, len(angleArr)):
+            dists = np.abs(angleArr[0] - (opt + angleArr[i]))
+            angleArr[i] = angleArr[i] + opt[np.argmin(dists)]
 
-        return np.mean(angleArr), np.std(angleArr), lines
+        mean, std = np.mean(angleArr), np.std(angleArr)
+
+        # We like angles in [0, 180)
+        if mean < 0:
+            mean += 180
+
+        return mean, std, lines
 
 
 def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,

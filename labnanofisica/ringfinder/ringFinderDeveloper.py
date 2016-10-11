@@ -39,10 +39,10 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadTitle.setTextFormat(QtCore.Qt.RichText)
         loadLayout.addWidget(loadTitle, 0, 0)
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
-        self.STORMPxEdit = QtGui.QLineEdit('6.65')
+        self.STORMPxEdit = QtGui.QLineEdit('13.3')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
         loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
-        self.magnificationEdit = QtGui.QLineEdit('20')
+        self.magnificationEdit = QtGui.QLineEdit('10')
         loadLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
         loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
@@ -305,7 +305,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         load = self.loadImage('STORM', np.float(self.main.STORMPxEdit.text()),
                               crop=3*mag, filename=filename)
         if load:
-            self.inputImgHist.setLevels(0, 0.5)
+            self.inputImgHist.setLevels(0, 3)
             self.main.sigmaEdit.setText('150')
             self.main.intThresEdit.setText('0.5')
 
@@ -461,8 +461,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.th0, lines = tools.getDirection(self.selected,
                                              np.invert(self.selectedMask),
                                              minLen)
-        text = 'Angle is {0:.1f}, calculated from {0:.0f} lines'
-        print(text.format(self.th0, len(lines)))
 
         # Lines plot
         pen = pg.mkPen(color=(0, 255, 100), width=1, style=QtCore.Qt.SolidLine,
