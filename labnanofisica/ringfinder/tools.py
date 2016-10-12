@@ -63,6 +63,11 @@ def blockshaped(arr, nrows, ncols):
                .reshape(-1, nrows, ncols))
 
 
+from scipy.ndimage.measurements import center_of_mass
+
+
+
+
 def firstNmax(coord, image, N):
     """Returns the first N max in an image from an array of coord of the max
        in the image"""
@@ -167,7 +172,7 @@ def linesFromBinary(binaryData, minLen, debug=False):
         opt = np.array([180, 0, -180])
         for i in np.arange(1, len(angleArr)):
             dists = np.abs(angleArr[0] - (opt + angleArr[i]))
-            angleArr[i] = angleArr[i] + opt[np.argmin(dists)]
+            angleArr[i] += opt[np.argmin(dists)]
 
         mean, std = np.mean(angleArr), np.std(angleArr)
 
@@ -177,6 +182,29 @@ def linesFromBinary(binaryData, minLen, debug=False):
 
         return mean, std, lines
 
+
+def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
+              developer=False):
+
+    blockMask = blocksMask[25]
+    y0, x0 = np.array(center_of_mass(~blockMask), dtype=int)
+    yMax, xMax = blockMask.shape
+    if ~blockMask[y0, x0]:
+
+        theta = np.arange(0, 180, thStep)
+
+        theta = 0
+        x, y = x0, y0
+        while ~blockMask[y, x] and x < xMax:
+            x += 1
+            y = int(np.tan(theta)*(x - x0) + y0)
+        y2, x2 = y, x
+
+        y, x = y0, x0
+        while ~blockMask[y, x] and x > 0:
+            x -= 1
+            y = int(np.tan(theta)*(x - x0) + y0)
+    y1, x1 = y, x
 
 def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
@@ -211,59 +239,63 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
     # line angle calculated
     th0, lines = getDirection(data, np.invert(mask), minLen, developer)
 
-    if th0 is None:
+#    if th0 is None:
+#
+#        theta = np.arange(0, 180, thStep)
+#
+#        # result = 0 means there's a neuron in the block but no rings are found
+#        # result = np.nan means there's no neuron in the block
+#        corrPhaseArg = np.zeros(np.size(theta))
+#        corrTheta = np.zeros(np.size(theta))
+#        corrMax = 0
+#        thetaMax = 0
+#        phaseMax = 0
+#        rings = False
 
-        theta = np.arange(0, 180, thStep)
+#    else:
 
-        # result = 0 means there's a neuron in the block but no rings are found
-        # result = np.nan means there's no neuron in the block
-        corrPhaseArg = np.zeros(np.size(theta))
-        corrTheta = np.zeros(np.size(theta))
-        corrMax = 0
-        thetaMax = 0
-        phaseMax = 0
-        rings = False
-
-    else:
-
-        # set the angle range to look for a correlation, 179 is added
-        # because of later corrAngle's expansion
+    try:
         if developer:
             theta = np.arange(np.min([th0 - deltaTh, 0]), 180, thStep)
         else:
             theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
 
-        corrPhaseArg = np.zeros(np.size(theta))
-        corrTheta = np.zeros(np.size(theta))
+    except TypeError:
+        th0 = 90
+        deltaTh = 90
+        theta = np.arange(0, 180, thStep)
 
-        subImgSize = np.shape(data)[0]
+    corrPhaseArg = np.zeros(np.size(theta))
+    corrTheta = np.zeros(np.size(theta))
 
-        # for now we correlate with the full sin2D pattern
-        for t in np.arange(len(theta)):
-            for p in phase:
-                # creates simulated axon
-                axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
-                                    b=sinPow).data
-                axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
+    subImgSize = np.shape(data)[0]
 
-                # saves correlation for the given phase p
-                # Unbiasing dependence of corr with area of neuron in block
-                corrPhase[p] = pearson(data, axonTheta)*neuronFrac
+    # for now we correlate with the full sin2D pattern
+    for t in np.arange(len(theta)):
+        for p in phase:
+            # creates simulated axon
+            axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
+                                b=sinPow).data
+            axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
 
-            # saves the correlation for the best p, and given angle i
-            corrTheta[t - 1] = np.max(corrPhase)
-            corrPhaseArg[t - 1] = .025*np.argmax(corrPhase)
+            # saves correlation for the given phase p
+            # Unbiasing dependence of corr with area of neuron in block
+            corrPhase[p] = pearson(data, axonTheta)*neuronFrac
 
-        # get theta, phase and correlation with greatest correlation value
-        # Find indices within (th0 - deltaTh, th0 + deltaTh)
-        ix = np.where(np.logical_and(th0 - deltaTh <= theta,
-                                     theta <= th0 + deltaTh))
-        i = np.argmax(corrTheta[ix])
-        thetaMax = theta[ix][i]
-        phaseMax = corrPhaseArg[ix][i]
-        corrMax = np.max(corrTheta[ix])
+        # saves the correlation for the best p, and given angle i
+        corrTheta[t - 1] = np.max(corrPhase)
+        corrPhaseArg[t - 1] = .025*np.argmax(corrPhase)
 
-        rings = corrMax > thres
+    # get theta, phase and correlation with greatest correlation value
+    # Find indices within (th0 - deltaTh, th0 + deltaTh)
+    ix = np.where(np.logical_and(th0 - deltaTh <= theta,
+                                 theta <= th0 + deltaTh))
+    i = np.argmax(corrTheta[ix])
+    thetaMax = theta[ix][i]
+    phaseMax = corrPhaseArg[ix][i]
+    corrMax = np.max(corrTheta[ix])
+
+    rings = corrMax > thres
 
     return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
 

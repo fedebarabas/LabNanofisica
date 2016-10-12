@@ -9,8 +9,8 @@ import os
 import time
 import numpy as np
 from scipy import ndimage as ndi
-from scipy.optimize import curve_fit
-from scipy.stats import norm
+# from scipy.optimize import curve_fit
+# from scipy.stats import norm
 import tifffile as tiff
 import multiprocessing as mp
 from PIL import Image
@@ -19,7 +19,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 
 import labnanofisica.utils as utils
-import labnanofisica.gaussians as gaussians
+# import labnanofisica.gaussians as gaussians
 import labnanofisica.ringfinder.tools as tools
 
 
@@ -404,7 +404,8 @@ class Gollum(QtGui.QMainWindow):
 
             # plot histogram of the correlation values
             y, x, _ = plt.hist(corrArray.flatten(), bins=60,
-                               range=(0, np.max(np.nan_to_num(corrArray))))
+                               range=(np.min(np.nan_to_num(corrArray)),
+                                      np.max(np.nan_to_num(corrArray))))
             x = (x[1:] + x[:-1])/2
 
 #            # Bimodal fitting
@@ -443,7 +444,11 @@ class Gollum(QtGui.QMainWindow):
 
             # Plotting
             plt.figure(0)
-            plt.bar(x, y, align='center', width=(x[1] - x[0]))
+            n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
+            mean = np.mean(corrArray[~np.isnan(corrArray)])
+            std = np.std(corrArray[~np.isnan(corrArray)])/np.sqrt(n)
+            plt.bar(x, y, align='center', width=(x[1] - x[0]),
+                    label='{0:.3f} +- {1:.3f}'.format(mean, std))
 #            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,
 #                     label='model')
 #            plt.plot(x, gaussians.gauss(x, *params[:3]), color='green', lw=3,
@@ -454,6 +459,7 @@ class Gollum(QtGui.QMainWindow):
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
             plt.ylabel("Frequency")
+            plt.legend()
             plt.savefig(os.path.join(path, folder + 'corr_hist'))
             plt.close()
 
