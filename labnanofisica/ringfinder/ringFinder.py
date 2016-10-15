@@ -7,6 +7,7 @@ Created on Fri Jul 15 12:25:40 2016
 
 import os
 import time
+import math
 import numpy as np
 from scipy import ndimage as ndi
 # from scipy.optimize import curve_fit
@@ -108,9 +109,9 @@ class Gollum(QtGui.QMainWindow):
 
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
-        self.intThresEdit = QtGui.QLineEdit('0.5')
+        self.intThresEdit = QtGui.QLineEdit()
         gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
-        self.sigmaEdit = QtGui.QLineEdit('150')
+        self.sigmaEdit = QtGui.QLineEdit()
         minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.corrThresEdit = QtGui.QLineEdit('0.075')
@@ -169,7 +170,7 @@ class Gollum(QtGui.QMainWindow):
                               filename=filename)
         if load:
             self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.1')
+            self.intThresEdit.setText('1')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -266,11 +267,8 @@ class Gollum(QtGui.QMainWindow):
             # initialize variables
             self.outputResult.clear()
 
-            # m is such that the image has m x m subimages
-            m = self.n
-
             # shape the data into the subimg that we need for the analysis
-            nblocks = np.array(self.inputData.shape)/m
+            nblocks = np.array(self.inputData.shape)/self.n
             blocksInput = tools.blockshaped(self.inputData, *nblocks)
             blocksInputS = tools.blockshaped(self.inputDataS, *nblocks)
             blocksMask = tools.blockshaped(self.mask, *nblocks)
@@ -349,7 +347,7 @@ class Gollum(QtGui.QMainWindow):
 
             if show:
                 plt.figure(figsize=(10, 8))
-                data = self.localCorr.reshape(*m)
+                data = self.localCorr.reshape(*self.n)
                 data = np.flipud(data)
                 maskedData = np.ma.array(data, mask=np.isnan(data))
                 heatmap = plt.pcolor(maskedData, cmap='inferno')
@@ -446,7 +444,7 @@ class Gollum(QtGui.QMainWindow):
             plt.figure(0)
             n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
             mean = np.mean(corrArray[~np.isnan(corrArray)])
-            std = np.std(corrArray[~np.isnan(corrArray)])/np.sqrt(n)
+            std = np.std(corrArray[~np.isnan(corrArray)])/math.sqrt(n)
             plt.bar(x, y, align='center', width=(x[1] - x[0]),
                     label='{0:.3f} +- {1:.3f}'.format(mean, std))
 #            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,

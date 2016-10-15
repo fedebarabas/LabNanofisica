@@ -63,11 +63,11 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.fftThrEdit = QtGui.QLineEdit('0.6')
         self.roiSizeEdit = QtGui.QLineEdit('1000')
         self.dirButton = QtGui.QPushButton('Get direction')
-        self.sigmaEdit = QtGui.QLineEdit('150')
+        self.sigmaEdit = QtGui.QLineEdit()
         text = 'Intensity and neuron content discrimination'
         self.intThrButton = QtGui.QPushButton(text)
         self.intThrButton.setCheckable(True)
-        self.intThresEdit = QtGui.QLineEdit('0.5')
+        self.intThresEdit = QtGui.QLineEdit()
         self.lineLengthEdit = QtGui.QLineEdit('300')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
@@ -294,7 +294,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                               filename=filename)
         if load:
             self.main.sigmaEdit.setText('100')
-            self.main.intThresEdit.setText('0.1')
+            self.main.intThresEdit.setText('1')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to

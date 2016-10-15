@@ -6,6 +6,8 @@ Created on Sun Aug 14 14:53:28 2016
 """
 
 import numpy as np
+import math
+from scipy.ndimage.measurements import center_of_mass
 from skimage.feature import peak_local_max
 try:
     import skimage.filters as filters
@@ -31,7 +33,7 @@ def pearson(a, b):
     e_vect = bn*bn
 
     # Finally get r using those vectorized versions
-    r_out = np.sum(c_vect)/np.sqrt(np.sum(d_vect)*np.sum(e_vect))
+    r_out = np.sum(c_vect)/math.sqrt(np.sum(d_vect)*np.sum(e_vect))
 
     return r_out
 
@@ -61,11 +63,6 @@ def blockshaped(arr, nrows, ncols):
     return (arr.reshape(h//nrows, nrows, -1, ncols)
                .swapaxes(1, 2)
                .reshape(-1, nrows, ncols))
-
-
-from scipy.ndimage.measurements import center_of_mass
-
-
 
 
 def firstNmax(coord, image, N):
@@ -186,25 +183,59 @@ def linesFromBinary(binaryData, minLen, debug=False):
 def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
               developer=False):
 
-    blockMask = blocksMask[25]
-    y0, x0 = np.array(center_of_mass(~blockMask), dtype=int)
-    yMax, xMax = blockMask.shape
-    if ~blockMask[y0, x0]:
+    mask = blocksMask[25]
+    y0, x0 = np.array(center_of_mass(~mask), dtype=int)
+    yMax, xMax = mask.shape
+    if ~mask[y0, x0]:
 
-        theta = np.arange(0, 180, thStep)
+        theta = np.arange(0, math.pi, thStep*math.pi/180)
+        m = np.tan(theta)
 
-        theta = 0
-        x, y = x0, y0
-        while ~blockMask[y, x] and x < xMax:
-            x += 1
-            y = int(np.tan(theta)*(x - x0) + y0)
-        y2, x2 = y, x
+        # Taking care of infinite slope case
+        theta = theta[np.abs(m) < 1000]
+        m = m[np.abs(m) < 1000]
 
-        y, x = y0, x0
-        while ~blockMask[y, x] and x > 0:
-            x -= 1
-            y = int(np.tan(theta)*(x - x0) + y0)
-    y1, x1 = y, x
+        lineLength = 0
+        for i in np.arange(len(theta)):
+
+            # Find right intersection between line and neuron edge
+            x, y = x0, y0
+            while ~mask[y, x] and x < xMax:
+                print(x, y)
+                x += 1
+                y = int(m[i]*(x - x0) + y0)
+
+                # If it gets out of the image
+                if abs(y) >= mask.shape[0] or y < 0:
+                    x -= 1
+                    y = int(m[i]*(x - x0) + y0)
+                    break
+            yq, xq = y, x
+
+            # Find left intersection between line and neuron edge
+            y, x = y0, x0
+            while ~mask[y, x] and x > 0:
+                print(x, y)
+                x -= 1
+                y = int(m[i]*(x - x0) + y0)
+
+                # If it gets out of the image
+                if abs(y) >= mask.shape[0] or y < 0:
+                    x += 1
+                    y = int(m[i]*(x - x0) + y0)
+                    break
+            yp, xp = y, x
+
+            # vertical line case
+
+            # We keep coordinates of longest line
+            newLength = math.sqrt((xq - xp)**2 + (yq - yp)**2)
+            if lineLength < newLength:
+                lineLength = newLength
+                x2, y2 = xq, yq
+                x1, y1 = xp, yp
+
+
 
 def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
