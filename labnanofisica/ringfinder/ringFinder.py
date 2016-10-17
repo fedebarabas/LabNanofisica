@@ -7,6 +7,7 @@ Created on Fri Jul 15 12:25:40 2016
 
 import os
 import time
+import math
 import numpy as np
 from scipy import ndimage as ndi
 # from scipy.optimize import curve_fit
@@ -19,7 +20,6 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
 
 import labnanofisica.utils as utils
-# import labnanofisica.gaussians as gaussians
 import labnanofisica.ringfinder.tools as tools
 
 
@@ -58,29 +58,33 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout = QtGui.QGridLayout()
         self.cwidget.setLayout(self.mainLayout)
 
-        # input, output and buttons widgets
-        self.inputWidget = pg.GraphicsLayoutWidget()
-        self.buttonWidget = QtGui.QWidget()
+        # Image with correlation results
+        self.corrImgWidget = pg.GraphicsLayoutWidget()
+        self.corrImgItem = pg.ImageItem()
+        self.corrVb = self.corrImgWidget.addViewBox(col=0, row=0)
+        self.corrVb.setAspectLocked(True)
+        self.corrVb.addItem(self.corrImgItem)
+        self.corrImgHist = pg.HistogramLUTItem()
+        self.corrImgHist.gradient.loadPreset('thermal')
+        self.corrImgHist.setImageItem(self.corrImgItem)
+        self.corrImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.corrImgWidget.addItem(self.corrImgHist)
+        self.corrResult = pg.ImageItem()
+        self.corrVb.addItem(self.corrResult)
 
-        # layout of the three widgets
-        self.mainLayout.addWidget(self.inputWidget, 0, 1)
-        self.mainLayout.addWidget(self.buttonWidget, 0, 0)
-        self.mainLayout.setColumnMinimumWidth(1, 600)
-        self.buttonWidget.setFixedWidth(250)
-
-        self.inputImgItem = pg.ImageItem()
-        self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
-        self.inputVb.setAspectLocked(True)
-        self.inputVb.addItem(self.inputImgItem)
-
-        self.inputImgHist = pg.HistogramLUTItem()
-        self.inputImgHist.gradient.loadPreset('thermal')
-        self.inputImgHist.setImageItem(self.inputImgItem)
-        self.inputImgHist.vb.setLimits(yMin=0, yMax=20000)
-        self.inputWidget.addItem(self.inputImgHist)
-
-        self.outputResult = pg.ImageItem()
-        self.inputVb.addItem(self.outputResult)
+        # Image with ring results
+        self.ringImgWidget = pg.GraphicsLayoutWidget()
+        self.ringImgItem = pg.ImageItem()
+        self.ringVb = self.ringImgWidget.addViewBox(col=0, row=0)
+        self.ringVb.setAspectLocked(True)
+        self.ringVb.addItem(self.ringImgItem)
+        self.ringImgHist = pg.HistogramLUTItem()
+        self.ringImgHist.gradient.loadPreset('thermal')
+        self.ringImgHist.setImageItem(self.ringImgItem)
+        self.ringImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.ringImgWidget.addItem(self.ringImgHist)
+        self.ringResult = pg.ImageItem()
+        self.ringVb.addItem(self.ringResult)
 
         # Separate frame for loading controls
         loadFrame = QtGui.QFrame(self)
@@ -109,16 +113,18 @@ class Gollum(QtGui.QMainWindow):
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
         self.intThresEdit = QtGui.QLineEdit('0.5')
-        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
         self.sigmaEdit = QtGui.QLineEdit('150')
-        minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit('300')
-        self.corrThresEdit = QtGui.QLineEdit('0.075')
+        defaultThreshold = 0.14
+        self.corrThresEdit = QtGui.QLineEdit(str(defaultThreshold))
+        self.corrSlider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
+        self.corrSlider.setMinimum(0)
+        self.corrSlider.setMaximum(250)   # Divide by 1000 to get corr value
+        self.corrSlider.setValue(1000*defaultThreshold)
+        self.corrSlider.valueChanged[int].connect(self.sliderChange)
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
-        powLabel = QtGui.QLabel('Sinusoidal pattern power')
         self.sinPowerEdit = QtGui.QLineEdit('6')
-        wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
         self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
         self.corrButton.setCheckable(True)
@@ -129,30 +135,44 @@ class Gollum(QtGui.QMainWindow):
         settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
         settingsLayout.addWidget(settingsTitle, 0, 0)
-        settingsLayout.addWidget(self.intThrLabel, 1, 0)
-        settingsLayout.addWidget(self.intThresEdit, 1, 1)
-        settingsLayout.addWidget(gaussianSigmaLabel, 2, 0)
-        settingsLayout.addWidget(self.sigmaEdit, 2, 1)
-        settingsLayout.addWidget(minLenLabel, 3, 0)
-        settingsLayout.addWidget(self.lineLengthEdit, 3, 1)
+#        settingsLayout.addWidget(self.intThrLabel, 1, 0)
+#        settingsLayout.addWidget(self.intThresEdit, 1, 1)
+#        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
+#        settingsLayout.addWidget(gaussianSigmaLabel, 2, 0)
+#        settingsLayout.addWidget(self.sigmaEdit, 2, 1)
+#        minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
+#        settingsLayout.addWidget(minLenLabel, 3, 0)
+#        settingsLayout.addWidget(self.lineLengthEdit, 3, 1)
         settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 4, 0)
         settingsLayout.addWidget(self.corrThresEdit, 4, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 5, 0)
-        settingsLayout.addWidget(self.thetaStepEdit, 5, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 6, 0)
-        settingsLayout.addWidget(self.deltaAngleEdit, 6, 1)
-        settingsLayout.addWidget(powLabel, 7, 0)
-        settingsLayout.addWidget(self.sinPowerEdit, 7, 1)
-        settingsLayout.addWidget(wvlenLabel, 8, 0)
-        settingsLayout.addWidget(self.wvlenEdit, 8, 1)
-        settingsLayout.addWidget(self.corrButton, 9, 0, 1, 2)
+        settingsLayout.addWidget(self.corrSlider, 5, 0, 1, 2)
+#        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 6, 0)
+#        settingsLayout.addWidget(self.thetaStepEdit, 6, 1)
+#        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 7, 0)
+#        settingsLayout.addWidget(self.deltaAngleEdit, 7, 1)
+#        powLabel = QtGui.QLabel('Sinusoidal pattern power')
+#        settingsLayout.addWidget(powLabel, 8, 0)
+#        settingsLayout.addWidget(self.sinPowerEdit, 8, 1)
+#        wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
+#        settingsLayout.addWidget(wvlenLabel, 9, 0)
+#        settingsLayout.addWidget(self.wvlenEdit, 9, 1)
+        settingsLayout.addWidget(self.corrButton, 10, 0, 1, 2)
         loadLayout.setColumnMinimumWidth(1, 40)
         settingsFrame.setFixedHeight(280)
 
+        self.buttonWidget = QtGui.QWidget()
         buttonsLayout = QtGui.QGridLayout()
         self.buttonWidget.setLayout(buttonsLayout)
         buttonsLayout.addWidget(loadFrame, 0, 0)
         buttonsLayout.addWidget(settingsFrame, 1, 0)
+
+        # layout of the three widgets
+        self.mainLayout.addWidget(self.buttonWidget, 0, 0)
+        self.mainLayout.addWidget(self.corrImgWidget, 0, 1)
+        self.mainLayout.addWidget(self.ringImgWidget, 0, 2)
+        self.mainLayout.setColumnMinimumWidth(1, 600)
+        self.mainLayout.setColumnMinimumWidth(2, 600)
+        self.buttonWidget.setFixedWidth(250)
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
@@ -164,12 +184,25 @@ class Gollum(QtGui.QMainWindow):
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
                                    'ringfinder', 'spectrinSTED.tif'))
 
+    def sliderChange(self, value):
+        self.corrThresEdit.setText(str(np.round(0.001*value, 2)))
+
+    def corrEditChange(self, text):
+        self.corrSlider.setValue(1000*float(text))
+
+        try:
+            self.ringsBig = np.nan_to_num(self.localCorrBig) > float(text)
+            self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
+
+        except:
+            pass
+
     def loadSTED(self, filename=None):
         load = self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
                               filename=filename)
         if load:
             self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.1')
+            self.intThresEdit.setText('0.5')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -180,8 +213,9 @@ class Gollum(QtGui.QMainWindow):
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
                               crop=3*mag, filename=filename)
         if load:
-            self.inputImgHist.setLevels(0, 3)
-            self.sigmaEdit.setText('150')
+            self.corrImgHist.setLevels(0, 3)
+            self.ringImgHist.setLevels(0, 3)
+            self.sigmaEdit.setText('100')
             self.intThresEdit.setText('0.5')
 
     def loadImage(self, pxSize, tt, crop=0, filename=None):
@@ -202,8 +236,10 @@ class Gollum(QtGui.QMainWindow):
                 self.initialdir = os.path.split(self.filename)[0]
                 self.crop = np.int(crop)
                 self.pxSize = pxSize
-                self.inputVb.clear()
-                self.outputResult.clear()
+                self.corrVb.clear()
+                self.corrResult.clear()
+                self.ringVb.clear()
+                self.ringResult.clear()
 
                 im = Image.open(self.filename)
                 self.inputData = np.array(im).astype(np.float64)
@@ -213,26 +249,31 @@ class Gollum(QtGui.QMainWindow):
                                                 self.crop:bound[1]]
                 self.shape = self.inputData.shape
                 self.updateImage()
-                self.inputVb.addItem(self.inputImgItem)
+                self.corrVb.addItem(self.corrImgItem)
+                self.ringVb.addItem(self.ringImgItem)
                 showIm = np.fliplr(np.transpose(self.inputData))
-                self.inputImgItem.setImage(showIm)
+                self.corrImgItem.setImage(showIm)
+                self.ringImgItem.setImage(showIm)
 
                 # We need 1um n-sized subimages
                 self.subimgPxSize = 1000/self.pxSize
                 self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
-                self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+                self.grid = tools.Grid(self.corrVb, self.shape, self.n)
 
-                self.inputVb.setLimits(xMin=-0.05*self.shape[0],
-                                       xMax=1.05*self.shape[0], minXRange=4,
-                                       yMin=-0.05*self.shape[1],
-                                       yMax=1.05*self.shape[1], minYRange=4)
+                self.corrVb.setLimits(xMin=-0.05*self.shape[0],
+                                      xMax=1.05*self.shape[0], minXRange=4,
+                                      yMin=-0.05*self.shape[1],
+                                      yMax=1.05*self.shape[1], minYRange=4)
+                self.ringVb.setLimits(xMin=-0.05*self.shape[0],
+                                      xMax=1.05*self.shape[0], minXRange=4,
+                                      yMin=-0.05*self.shape[1],
+                                      yMax=1.05*self.shape[1], minYRange=4)
 
                 self.dataMean = np.mean(self.inputData)
                 self.dataStd = np.std(self.inputData)
 
-#                self.outputVb.addItem(self.outputImg)
-#                self.outputWidget.addItem(self.outputImgHist)
-                self.inputVb.addItem(self.outputResult)
+                self.corrVb.addItem(self.corrResult)
+                self.ringVb.addItem(self.ringResult)
 
                 return True
 
@@ -263,8 +304,8 @@ class Gollum(QtGui.QMainWindow):
 
         if self.corrButton.isChecked() or batch:
 
-            # initialize variables
-            self.outputResult.clear()
+            self.corrResult.clear()
+            self.ringResult.clear()
 
             # m is such that the image has m x m subimages
             m = self.n
@@ -343,9 +384,15 @@ class Gollum(QtGui.QMainWindow):
             self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
             self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
             showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
-            self.outputResult.setImage(np.nan_to_num(showIm))
-            self.outputResult.setZValue(10)    # make sure this image is on top
-            self.outputResult.setOpacity(0.5)
+            self.corrResult.setImage(np.nan_to_num(showIm))
+            self.corrResult.setZValue(10)    # make sure this image is on top
+            self.corrResult.setOpacity(0.5)
+
+            thres = float(self.corrThresEdit.text())
+            self.ringsBig = np.nan_to_num(self.localCorrBig) > thres
+            self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
+            self.ringResult.setZValue(10)    # make sure this image is on top
+            self.ringResult.setOpacity(0.5)
 
             if show:
                 plt.figure(figsize=(10, 8))
@@ -362,7 +409,8 @@ class Gollum(QtGui.QMainWindow):
                 plt.show()
 
         else:
-            self.outputResult.clear()
+            self.corrResult.clear()
+            self.ringResult.clear()
 
     def batch(self, function, tech):
         try:
@@ -432,6 +480,8 @@ class Gollum(QtGui.QMainWindow):
                             imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
+
+            # FIXME: make it work again
 #                expanded = np.repeat(np.repeat(ringsArray[i], m[1], axis=1),
 #                                     m[0], axis=0)
 #                ringsExp[i, self.crop:self.initShape[0] - self.crop,
@@ -444,11 +494,15 @@ class Gollum(QtGui.QMainWindow):
 
             # Plotting
             plt.figure(0)
+            validCorr = corrArray[~np.isnan(corrArray)]
             n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
-            mean = np.mean(corrArray[~np.isnan(corrArray)])
-            std = np.std(corrArray[~np.isnan(corrArray)])/np.sqrt(n)
+            mean = np.mean(validCorr)
+            std = np.std(validCorr)/np.sqrt(n)
+            ringFrac = np.sum(validCorr > 0.14) / n
+            ringStd = math.sqrt(ringFrac*(1 - ringFrac)/n)
+            label = '{0:.3f} +- {1:.3f} \nringFrac {2:.3f} +- {3:.3f}'
             plt.bar(x, y, align='center', width=(x[1] - x[0]),
-                    label='{0:.3f} +- {1:.3f}'.format(mean, std))
+                    label=label.format(mean, std, ringFrac, ringStd))
 #            plt.plot(x, gaussians.bimodal(x, *params), color='red', lw=3,
 #                     label='model')
 #            plt.plot(x, gaussians.gauss(x, *params[:3]), color='green', lw=3,

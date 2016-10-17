@@ -54,7 +54,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadFrame.setFixedHeight(180)
 
         # Ring finding method settings
-        self.corrThresEdit = QtGui.QLineEdit('0.07')
+        self.corrThresEdit = QtGui.QLineEdit('0.14')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('20')
         self.sinPowerEdit = QtGui.QLineEdit('6')
@@ -294,7 +294,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                               filename=filename)
         if load:
             self.main.sigmaEdit.setText('100')
-            self.main.intThresEdit.setText('0.1')
+            self.main.intThresEdit.setText('0.5')
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -306,7 +306,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                               crop=3*mag, filename=filename)
         if load:
             self.inputImgHist.setLevels(0, 3)
-            self.main.sigmaEdit.setText('150')
+            self.main.sigmaEdit.setText('100')
             self.main.intThresEdit.setText('0.5')
 
     def updateImage(self):
