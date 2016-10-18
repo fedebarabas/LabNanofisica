@@ -54,7 +54,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         loadFrame.setFixedHeight(180)
 
         # Ring finding method settings
-        self.corrThresEdit = QtGui.QLineEdit('0.14')
+        self.corrThresEdit = QtGui.QLineEdit('0.12')
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaThEdit = QtGui.QLineEdit('20')
         self.sinPowerEdit = QtGui.QLineEdit('6')
