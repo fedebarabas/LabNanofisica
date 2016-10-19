@@ -180,6 +180,9 @@ def linesFromBinary(binaryData, minLen, debug=False):
         return mean, std, lines
 
 
+# First try at a method for directly fit the rings profile. Current problem
+# is that it finds the longest line within the neuron and this is not parallel
+# to the neuron. It should find the longest ~50nm thick rectangle instead.
 def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
               developer=False):
 
@@ -234,7 +237,6 @@ def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                 lineLength = newLength
                 x2, y2 = xq, yq
                 x1, y1 = xp, yp
-
 
 
 
