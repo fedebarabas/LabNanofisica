@@ -237,6 +237,7 @@ def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
 
 
 
+
 def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
     """Searches for rings by correlating the image data with a given
@@ -270,63 +271,63 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
     # line angle calculated
     th0, lines = getDirection(data, np.invert(mask), minLen, developer)
 
-#    if th0 is None:
-#
-#        theta = np.arange(0, 180, thStep)
-#
-#        # result = 0 means there's a neuron in the block but no rings are found
-#        # result = np.nan means there's no neuron in the block
-#        corrPhaseArg = np.zeros(np.size(theta))
-#        corrTheta = np.zeros(np.size(theta))
-#        corrMax = 0
-#        thetaMax = 0
-#        phaseMax = 0
-#        rings = False
+    if th0 is None:
 
-#    else:
-
-    try:
-        if developer:
-            theta = np.arange(np.min([th0 - deltaTh, 0]), 180, thStep)
-        else:
-            theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
-
-    except TypeError:
-        th0 = 90
-        deltaTh = 90
         theta = np.arange(0, 180, thStep)
 
-    corrPhaseArg = np.zeros(np.size(theta))
-    corrTheta = np.zeros(np.size(theta))
+        # result = 0 means there's a neuron in the block but no rings are found
+        # result = np.nan means there's no neuron in the block
+        corrPhaseArg = np.zeros(np.size(theta))
+        corrTheta = np.zeros(np.size(theta))
+        corrMax = 0
+        thetaMax = 0
+        phaseMax = 0
+        rings = False
 
-    subImgSize = np.shape(data)[0]
+    else:
 
-    # for now we correlate with the full sin2D pattern
-    for t in np.arange(len(theta)):
-        for p in phase:
-            # creates simulated axon
-            axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
-                                b=sinPow).data
-            axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
+        try:
+            if developer:
+                theta = np.arange(np.min([th0 - deltaTh, 0]), 180, thStep)
+            else:
+                theta = np.arange(th0 - deltaTh, th0 + deltaTh, thStep)
 
-            # saves correlation for the given phase p
-            # Unbiasing dependence of corr with area of neuron in block
-            corrPhase[p] = pearson(data, axonTheta)*neuronFrac
+        except TypeError:
+            th0 = 90
+            deltaTh = 90
+            theta = np.arange(0, 180, thStep)
 
-        # saves the correlation for the best p, and given angle i
-        corrTheta[t - 1] = np.max(corrPhase)
-        corrPhaseArg[t - 1] = .025*np.argmax(corrPhase)
+        corrPhaseArg = np.zeros(np.size(theta))
+        corrTheta = np.zeros(np.size(theta))
 
-    # get theta, phase and correlation with greatest correlation value
-    # Find indices within (th0 - deltaTh, th0 + deltaTh)
-    ix = np.where(np.logical_and(th0 - deltaTh <= theta,
-                                 theta <= th0 + deltaTh))
-    i = np.argmax(corrTheta[ix])
-    thetaMax = theta[ix][i]
-    phaseMax = corrPhaseArg[ix][i]
-    corrMax = np.max(corrTheta[ix])
+        subImgSize = np.shape(data)[0]
 
-    rings = corrMax > thres
+        # for now we correlate with the full sin2D pattern
+        for t in np.arange(len(theta)):
+            for p in phase:
+                # creates simulated axon
+                axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
+                                    b=sinPow).data
+                axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
+
+                # saves correlation for the given phase p
+                # Unbiasing dependence of corr with area of neuron in block
+                corrPhase[p] = pearson(data, axonTheta)*neuronFrac
+
+            # saves the correlation for the best p, and given angle i
+            corrTheta[t - 1] = np.max(corrPhase)
+            corrPhaseArg[t - 1] = .025*np.argmax(corrPhase)
+
+        # get theta, phase and correlation with greatest correlation value
+        # Find indices within (th0 - deltaTh, th0 + deltaTh)
+        ix = np.where(np.logical_and(th0 - deltaTh <= theta,
+                                     theta <= th0 + deltaTh))
+        i = np.argmax(corrTheta[ix])
+        thetaMax = theta[ix][i]
+        phaseMax = corrPhaseArg[ix][i]
+        corrMax = np.max(corrTheta[ix])
+
+        rings = corrMax > thres
 
     return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
 
