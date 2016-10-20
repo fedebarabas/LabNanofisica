@@ -186,15 +186,15 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout.setColumnMinimumWidth(2, 600)
         self.buttonWidget.setFixedWidth(250)
 
-        self.loadSTORMButton.clicked.connect(self.loadSTORM)
-        self.loadSTEDButton.clicked.connect(self.loadSTED)
-        self.sigmaEdit.textChanged.connect(self.changeSigma)
-        self.corrButton.clicked.connect(self.ringFinder)
-
         # Load sample STED image
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
                                    'ringfinder', 'spectrinSTED.tif'))
+
+        self.loadSTORMButton.clicked.connect(self.loadSTORM)
+        self.loadSTEDButton.clicked.connect(self.loadSTED)
+        self.sigmaEdit.textChanged.connect(self.changeSigma)
+        self.corrButton.clicked.connect(self.ringFinder)
 
     def sliderChange(self, value):
         self.corrThresEdit.setText(str(np.round(0.001*value, 2)))
@@ -209,13 +209,23 @@ class Gollum(QtGui.QMainWindow):
             self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
 
     def loadSTED(self, filename=None):
+        prevSigma = self.sigmaEdit.text()
+        prevThres = self.intThresEdit.text()
+        self.sigmaEdit.setText('100')
+        self.intThresEdit.setText('0.5')
         load = self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
                               filename=filename)
-        if load:
-            self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.5')
+        if not(load):
+            self.sigmaEdit.setText(prevSigma)
+            self.intThresEdit.setText(prevThres)
 
     def loadSTORM(self, filename=None):
+        prevSigma = self.sigmaEdit.text()
+        prevThres = self.intThresEdit.text()
+        self.corrImgHist.setLevels(0, 3)
+        self.ringImgHist.setLevels(0, 3)
+        self.sigmaEdit.setText('100')
+        self.intThresEdit.setText('0.5')
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those 3px borders before running the
@@ -223,11 +233,9 @@ class Gollum(QtGui.QMainWindow):
         mag = np.float(self.magnificationEdit.text())
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
                               crop=3*mag, filename=filename)
-        if load:
-            self.corrImgHist.setLevels(0, 3)
-            self.ringImgHist.setLevels(0, 3)
-            self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.5')
+        if not(load):
+            self.sigmaEdit.setText(prevSigma)
+            self.intThresEdit.setText(prevThres)
 
     def loadImage(self, pxSize, tt, crop=0, filename=None):
 
@@ -313,12 +321,9 @@ class Gollum(QtGui.QMainWindow):
     def ringFinder(self, show=True, batch=False):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
-        Subsequently gives the output data and plots it"""
+        Subsequently gives the output data and plots it."""
 
         if self.corrButton.isChecked() or batch:
-
-            self.corrResult.clear()
-            self.ringResult.clear()
 
             # shape the data into the subimg that we need for the analysis
             nblocks = np.array(self.inputData.shape)/self.n
@@ -337,7 +342,9 @@ class Gollum(QtGui.QMainWindow):
             cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
 
             args = self.n, blocksInput, blocksInputS, blocksMask, intThr, cArgs
-            self.worker = Worker(*args)
+            self.localCorr = np.zeros(len(blocksInput))
+            self.worker = Worker(*args, self.localCorr)
+            self.worker.startSignal.connect(self.updateFileStatus)
             self.worker.doneSignal.connect(self.updateOutput)
             self.workerThread = QtCore.QThread(self)
             self.worker.moveToThread(self.workerThread)
@@ -354,7 +361,7 @@ class Gollum(QtGui.QMainWindow):
 #                # Block may be excluded from the analysis for two reasons.
 #                # Firstly, because the intensity for all its pixels may be
 #                # too low. Secondly, because the part of the block that
-#                # belongs toa neuron may be below an arbitrary 30% of the
+#                # belongs to a neuron may be below an arbitrary 30% of the
 #                # block. We apply intensity threshold to smoothed data so we
 #                # don't catch tiny bright spots outside neurons
 #                neuronFrac = 1 - np.sum(mask)/np.size(mask)
@@ -367,41 +374,28 @@ class Gollum(QtGui.QMainWindow):
 #                else:
 #                    self.localCorr[i] = np.nan
 #
-#            ###
-
-            self.localCorr = self.localCorr.reshape(*self.n)
-
-            # code for visualization of the output
-            mag = np.array(self.inputData.shape)/self.n
-            self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
-            self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
-            showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
-            self.outputResult.setImage(np.nan_to_num(showIm))
-            self.outputResult.setZValue(10)    # make sure this image is on top
-            self.outputResult.setOpacity(0.5)
-
-            if show:
-                plt.figure(figsize=(10, 8))
-                data = self.localCorr.reshape(*self.n)
-                data = np.flipud(data)
-                maskedData = np.ma.array(data, mask=np.isnan(data))
-                heatmap = plt.pcolor(maskedData, cmap='inferno')
-                for y in range(data.shape[0]):
-                    for x in range(data.shape[1]):
-                        plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
-                                 horizontalalignment='center',
-                                 verticalalignment='center',)
-                plt.colorbar(heatmap)
-                plt.show()
+#            self.localCorr = self.localCorr.reshape(*self.n)
+#            self.updateOutput(self.localCorr)
 
         else:
             self.corrResult.clear()
             self.ringResult.clear()
 
+    def updateFileStatus(self):
+        self.fileStatus.setText(os.path.split(self.filename)[1])
+
     def updateOutput(self, localCorr):
 
+        self.workerThread.quit()
+
+        # code for visualization of the output
+        self.corrResult.clear()
+        self.ringResult.clear()
+
         self.analyzed = True
-        self.localCorr = localCorr
+#        self.localCorr = localCorr
+
+        print(self.localCorr)
 
         # code for visualization of the output
         mag = np.array(self.inputData.shape)/self.n
@@ -435,46 +429,49 @@ class Gollum(QtGui.QMainWindow):
                                            [('Tiff file', '.tif')],
                                            self.initialdir)
 
-            self.batchWorker = Worker(*args)
-            self.batchWorker.doneSignal.connect(self.updateOutput)
-            self.batchWorkerThread = QtCore.QThread(self)
-            self.batchWorker.moveToThread(self.batchWorkerThread)
-            self.batchWorkerThread.started.connect(self.batchWorker.start)
-            self.batchWorkerThread.start()
-#            nfiles = len(filenames)
-#            function(filenames[0])
-#            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-#
-#            # Expand correlation array so it matches data shape
-#            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                               dtype=np.single)
-#            corrExp[:] = np.nan
-#            ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                                dtype=np.single)
-#            ringsExp[:] = np.nan
-#
-#            path = os.path.split(filenames[0])[0]
-#            folder = os.path.split(path)[1]
-#            self.folderStatus.setText('Processing folder ' + path)
-#            print('Processing folder', path)
-#            t0 = time.time()
-#            for i in np.arange(nfiles):
+#            self.batchWorker = Worker(*args)
+#            self.batchWorker.doneSignal.connect(self.updateOutput)
+#            self.batchWorkerThread = QtCore.QThread(self)
+#            self.batchWorker.moveToThread(self.batchWorkerThread)
+#            self.batchWorkerThread.started.connect(self.batchWorker.start)
+#            self.batchWorkerThread.start()
+            self.nfiles = len(filenames)
+            function(filenames[0])
+            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+
+            # Expand correlation array so it matches data shape
+            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+                               dtype=np.single)
+            corrExp[:] = np.nan
+            ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+                                dtype=np.single)
+            ringsExp[:] = np.nan
+
+            self.iBatch = 0
+            self.worker.doneSignal.connect(self.stepBatch)
+
+            path = os.path.split(filenames[0])[0]
+            folder = os.path.split(path)[1]
+            self.folderStatus.setText('Processing folder ' + path)
+            print('Processing folder', path)
+            t0 = time.time()
+            for i in np.arange(self.nfiles):
                 print(os.path.split(filenames[i])[1])
-                self.fileStatus.setText(os.path.split(filenames[i])[1])
+#                self.fileStatus.setText(os.path.split(filenames[i])[1])
                 function(filenames[i])
                 self.ringFinder(False, batch=True)
-                corrArray[i] = self.localCorr
-
-                bound = (np.array(self.initShape) - self.crop).astype(np.int)
-                corrExp[i, self.crop:bound[0],
-                        self.crop:bound[1]] = self.localCorrBig
-
-                # Save correlation values array
-                corrName = utils.insertSuffix(filenames[i], '_correlation')
-                tiff.imsave(corrName, corrExp[i], software='Gollum',
-                            imagej=True,
-                            resolution=(1000/self.pxSize, 1000/self.pxSize),
-                            metadata={'spacing': 1, 'unit': 'um'})
+#                corrArray[i] = self.localCorr
+#
+#                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+#                corrExp[i, self.crop:bound[0],
+#                        self.crop:bound[1]] = self.localCorrBig
+#
+#                # Save correlation values array
+#                corrName = utils.insertSuffix(filenames[i], '_correlation')
+#                tiff.imsave(corrName, corrExp[i], software='Gollum',
+#                            imagej=True,
+#                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+#                            metadata={'spacing': 1, 'unit': 'um'})
 
             # Saving ring images
             ringsExp[corrExp < self.corrThres] = 0
@@ -551,9 +548,20 @@ class Gollum(QtGui.QMainWindow):
 
         except IndexError:
             self.fileStatus.setText('No file selected!')
-#            self.statusBar().showMessage('No file selected!')
 
-#            print("No file selected!")
+    def stepBatch(self):
+
+        self.corrArray[i] = self.localCorr
+
+        bound = (np.array(self.initShape) - self.crop).astype(np.int)
+        self.corrExp[i, self.crop:bound[0],
+                     self.crop:bound[1]] = self.localCorrBig
+
+        # Save correlation values array
+        corrName = utils.insertSuffix(self.filenames[i], '_correlation')
+        tiff.imsave(corrName, self.corrExp[i], software='Gollum', imagej=True,
+                    resolution=(1000/self.pxSize, 1000/self.pxSize),
+                    metadata={'spacing': 1, 'unit': 'um'})
 
     def batchSTORM(self):
         self.batch(self.loadSTORM, 'STORM')
@@ -564,24 +572,28 @@ class Gollum(QtGui.QMainWindow):
 
 class Worker(QtCore.QObject):
 
+    startSignal = QtCore.pyqtSignal()
     doneSignal = QtCore.pyqtSignal(np.ndarray)
 
     def __init__(self, n, blocksInput, blocksInputS, blocksMask, intThr, cArgs,
-                 *args, **kwargs):
+                 storeCorr, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.n = n
-        self.localCorr = np.zeros(len(blocksInput))
         self.blocksInput = blocksInput
         self.blocksInputS = blocksInputS
         self.blocksMask = blocksMask
         self.intThr = intThr
         self.cArgs = cArgs
+        self.storeCorr = storeCorr
 
         self.meanS = np.mean(self.blocksInputS)
         self.stdS = np.std(self.blocksInputS)
 
     def start(self):
+
+        self.startSignal.emit()
+        localCorr = np.zeros(len(self.blocksInput))
 
         # Single-core code
         for i in np.arange(len(self.blocksInput)):
@@ -601,42 +613,43 @@ class Worker(QtCore.QObject):
                 output = tools.corrMethod(block, mask, *self.cArgs)
                 angle, corrTheta, corrMax, theta, phase, rings = output
                 # Store results
-                self.localCorr[i] = corrMax
+                localCorr[i] = corrMax
             else:
-                self.localCorr[i] = np.nan
+                localCorr[i] = np.nan
 
-        self.localCorr = self.localCorr.reshape(*self.n)
-        self.doneSignal.emit(self.localCorr)
+        localCorr = localCorr.reshape(*self.n)
+        self.storeCorr = localCorr
+        self.doneSignal.emit(localCorr)
 
-
-class BatchWorker(QtCore.QObject):
-
-    doneSignal = QtCore.pyqtSignal(np.ndarray)
-    fileStartSignal =
-
-    def __init__(self, function, fileList, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        nfiles = len(fileList)
-        function(filenames[0])
-        corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-
-        # Expand correlation array so it matches data shape
-        corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-                           dtype=np.single)
-        corrExp[:] = np.nan
-        ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-                            dtype=np.single)
-        ringsExp[:] = np.nan
-
-    def start(self):
-
-        path = os.path.split(filenames[0])[0]
-        folder = os.path.split(path)[1]
-        self.folderStatus.setText('Processing folder ' + path)
-        print('Processing folder', path)
-        t0 = time.time()
-        for i in np.arange(nfiles):
+#
+#class BatchWorker(QtCore.QObject):
+#
+#    doneSignal = QtCore.pyqtSignal(np.ndarray)
+#    fileStartSignal =
+#
+#    def __init__(self, function, fileList, *args, **kwargs):
+#        super().__init__(*args, **kwargs)
+#
+#        nfiles = len(fileList)
+#        function(filenames[0])
+#        corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
+#
+#        # Expand correlation array so it matches data shape
+#        corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+#                           dtype=np.single)
+#        corrExp[:] = np.nan
+#        ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+#                            dtype=np.single)
+#        ringsExp[:] = np.nan
+#
+#    def start(self):
+#
+#        path = os.path.split(filenames[0])[0]
+#        folder = os.path.split(path)[1]
+#        self.folderStatus.setText('Processing folder ' + path)
+#        print('Processing folder', path)
+#        t0 = time.time()
+#        for i in np.arange(nfiles):
 
 
 if __name__ == '__main__':
