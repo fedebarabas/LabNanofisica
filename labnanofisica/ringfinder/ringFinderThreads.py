@@ -3,6 +3,8 @@
 Created on Fri Jul 15 12:25:40 2016
 
 @author: Luciano Masullo, Federico Barabas
+
+# TODO: QTHREADS ARE NOT WORKING AS THEY WERE SUPPOSED TO
 """
 
 import os
@@ -99,7 +101,7 @@ class Gollum(QtGui.QMainWindow):
         loadFrame.setLayout(loadLayout)
         loadTitle = QtGui.QLabel('<strong>Load image</strong>')
         loadTitle.setTextFormat(QtCore.Qt.RichText)
-        loadLayout.addWidget(loadTitle, 0, 0)
+        loadLayout.addWidget(loadTitle, 0, 0, 1, 2)
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
         self.STORMPxEdit = QtGui.QLineEdit('13.3')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
@@ -143,7 +145,7 @@ class Gollum(QtGui.QMainWindow):
         settingsFrame.setLayout(settingsLayout)
         settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
-        settingsLayout.addWidget(settingsTitle, 0, 0)
+        settingsLayout.addWidget(settingsTitle, 0, 0, 1, 2)
 #        settingsLayout.addWidget(self.intThrLabel, 1, 0)
 #        settingsLayout.addWidget(self.intThresEdit, 1, 1)
 #        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
@@ -184,7 +186,7 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout.addWidget(self.ringImgWidget, 1, 2, 2, 1)
         self.mainLayout.setColumnMinimumWidth(1, 600)
         self.mainLayout.setColumnMinimumWidth(2, 600)
-        self.buttonWidget.setFixedWidth(250)
+        self.buttonWidget.setFixedWidth(200)
 
         # Load sample STED image
         self.initialdir = os.getcwd()
@@ -343,13 +345,13 @@ class Gollum(QtGui.QMainWindow):
 
             args = self.n, blocksInput, blocksInputS, blocksMask, intThr, cArgs
             self.localCorr = np.zeros(len(blocksInput))
-            self.singleTask = SingleTask(*args)
+            self.singleObj = Single(*args)
             self.updateFileStatus()
-#            self.singleTask.signals.start.connect(self.updateFileStatus)
-            self.singleTask.doneSignal.connect(self.updateOutput)
+#            self.singleObj.signals.start.connect(self.updateFileStatus)
+            self.singleObj.doneSignal.connect(self.updateOutput)
             self.workerThread = QtCore.QThread(self)
-            self.singleTask.moveToThread(self.workerThread)
-            self.workerThread.started.connect(self.singleTask.start)
+            self.singleObj.moveToThread(self.workerThread)
+            self.workerThread.started.connect(self.singleObj.start)
             self.workerThread.start()
 
         else:
@@ -396,8 +398,20 @@ class Gollum(QtGui.QMainWindow):
             plt.colorbar(heatmap)
             plt.show()
 
-    def batch(self, function, tech):
+    def updateBar(self, text):
+        self.fileStatus.setText(text)
+
+    def batch(self, tech):
         try:
+
+            if tech == 'STORM':
+                pxSize = np.float(self.STORMPxEdit.text())
+                crop = 3*np.float(self.magnificationEdit.text())
+
+            elif tech == 'STED':
+                pxSize = np.float(self.STEDPxEdit.text())
+                crop = 0
+
             filenames = utils.getFilenames('Load ' + tech + ' images',
                                            [('Tiff file', '.tif')],
                                            self.initialdir)
@@ -408,116 +422,134 @@ class Gollum(QtGui.QMainWindow):
 #            self.batchWorker.moveToThread(self.batchWorkerThread)
 #            self.batchWorkerThread.started.connect(self.batchWorker.start)
 #            self.batchWorkerThread.start()
-            nfiles = len(filenames)
-            function(filenames[0])
-            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-
-            # Expand correlation array so it matches data shape
-            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-                               dtype=np.single)
-            corrExp[:] = np.nan
-            ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-                                dtype=np.single)
-            ringsExp[:] = np.nan
-
-            self.iBatch = 0
-            self.worker.doneSignal.connect(self.stepBatch)
-
-            path = os.path.split(filenames[0])[0]
-            folder = os.path.split(path)[1]
-            self.folderStatus.setText('Processing folder ' + path)
-            print('Processing folder', path)
-            t0 = time.time()
-            for i in np.arange(self.nfiles):
-                print(os.path.split(filenames[i])[1])
-#                self.fileStatus.setText(os.path.split(filenames[i])[1])
-                function(filenames[i])
-                self.ringFinder(False, batch=True)
-#                corrArray[i] = self.localCorr
+#            nfiles = len(filenames)
+#            function(filenames[0])
+#            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
 #
-#                bound = (np.array(self.initShape) - self.crop).astype(np.int)
-#                corrExp[i, self.crop:bound[0],
-#                        self.crop:bound[1]] = self.localCorrBig
+#            # Expand correlation array so it matches data shape
+#            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+#                               dtype=np.single)
+#            corrExp[:] = np.nan
+#            ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+#                                dtype=np.single)
+#            ringsExp[:] = np.nan
 #
+#            self.iBatch = 0
+#            self.worker.doneSignal.connect(self.stepBatch)
+
+            intThr = np.float(self.intThresEdit.text())
+            gaussSigma = np.float(self.sigmaEdit.text())
+            corrThres = np.float(self.corrThresEdit.text())
+            minLen = np.float(self.lineLengthEdit.text())/self.pxSize
+            thetaStep = np.float(self.deltaAngleEdit.text())
+            deltaTh = np.float(self.deltaAngleEdit.text())
+            wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+            sinPow = np.float(self.sinPowerEdit.text())
+            cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
+
+            self.batchObj = Batch(filenames, pxSize, crop, gaussSigma, intThr,
+                                  cArgs)
+            self.batchThread = QtCore.QThread(self)
+            self.batchObj.startSignal.connect(self.updateBar)
+            self.batchObj.moveToThread(self.batchThread)
+            self.batchThread.started.connect(self.batchObj.start)
+            self.batchThread.start()
+
+#            path = os.path.split(filenames[0])[0]
+##            folder = os.path.split(path)[1]
+#            self.folderStatus.setText('Processing folder ' + path)
+#            print('Processing folder', path)
+#            t0 = time.time()
+#            for i in np.arange(self.nfiles):
+#                print(os.path.split(filenames[i])[1])
+##                self.fileStatus.setText(os.path.split(filenames[i])[1])
+#                function(filenames[i])
+#                self.ringFinder(False, batch=True)
+##                corrArray[i] = self.localCorr
+##
+##                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+##                corrExp[i, self.crop:bound[0],
+##                        self.crop:bound[1]] = self.localCorrBig
+##
+##                # Save correlation values array
+##                corrName = utils.insertSuffix(filenames[i], '_correlation')
+##                tiff.imsave(corrName, corrExp[i], software='Gollum',
+##                            imagej=True,
+##                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+##                            metadata={'spacing': 1, 'unit': 'um'})
+#
+#            # Saving ring images
+#            ringsExp[corrExp < self.corrThres] = 0
+#            ringsExp[corrExp >= self.corrThres] = 1
+#            for i in np.arange(nfiles):
 #                # Save correlation values array
-#                corrName = utils.insertSuffix(filenames[i], '_correlation')
-#                tiff.imsave(corrName, corrExp[i], software='Gollum',
+#                ringName = utils.insertSuffix(filenames[i], '_rings')
+#                tiff.imsave(ringName, ringsExp[i], software='Gollum',
 #                            imagej=True,
 #                            resolution=(1000/self.pxSize, 1000/self.pxSize),
 #                            metadata={'spacing': 1, 'unit': 'um'})
-
-            # Saving ring images
-            ringsExp[corrExp < self.corrThres] = 0
-            ringsExp[corrExp >= self.corrThres] = 1
-            for i in np.arange(nfiles):
-                # Save correlation values array
-                ringName = utils.insertSuffix(filenames[i], '_rings')
-                tiff.imsave(ringName, ringsExp[i], software='Gollum',
-                            imagej=True,
-                            resolution=(1000/self.pxSize, 1000/self.pxSize),
-                            metadata={'spacing': 1, 'unit': 'um'})
-
-            # plot histogram of the correlation values
-            y, x, _ = plt.hist(corrArray.flatten(), bins=60,
-                               range=(np.min(np.nan_to_num(corrArray)),
-                                      np.max(np.nan_to_num(corrArray))))
-            x = (x[1:] + x[:-1])/2
-
-# ==============================================================================
-#             # Code for saving images that rely on bulk analysis
-#             ringsExp = np.zeros((nfiles, self.initShape[0],
-#                                  self.initShape[1]),
-#                                 dtype=np.single)
-#             corrExp = np.zeros((nfiles, self.initShape[0],
-#                                 self.initShape[1]),
-#                                 dtype=np.single)
-#             for i in np.arange(len(filenames)):
-#                 expanded = np.repeat(np.repeat(corrArray[i], m[1], axis=1),
-#                                      m[0], axis=0)
-# #                corrExp[i, self.crop:self.initShape[0] - self.crop,
-# #                        self.crop:self.initShape[1] - self.crop] = expanded
-#                 tiff.imsave(utils.insertSuffix(filenames[i], '_correlation'),
-#                             corrExp[i].astype(np.single), software='Gollum',
-#                             imagej=True,
-#                             resolution=(1000/self.pxSize, 1000/self.pxSize),
-#                             metadata={'spacing': 1, 'unit': 'um'})
 #
-#                 limits = np.array(self.initShape) - self.crop
-#                 rings = np.nan_to_num(corrArray[i]) > self.corrThres
-#                 ringsExp[i, self.crop:limits[0],
-#                          self.crop:limits[1]] = rings.astype(float)
-#                 tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
-#                             ringsExp[i], software='Gollum', imagej=True,
-#                             resolution=(1000/self.pxSize, 1000/self.pxSize),
-#                             metadata={'spacing': 1, 'unit': 'um'})
-# ==============================================================================
-
-            # Plotting
-            plt.figure(0)
-            validCorr = corrArray[~np.isnan(corrArray)]
-            n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
-            ringFrac = np.sum(validCorr > self.corrThres) / n
-            ringStd = math.sqrt(ringFrac*(1 - ringFrac)/n)
-            plt.bar(x, y, align='center', width=(x[1] - x[0]))
-            plt.plot((self.corrThres, self.corrThres), (0, np.max(y)), 'r--',
-                     linewidth=2)
-            text = 'ringFrac={0:.3f}\pm{1:.3f} \ncorrelation threshold={2:.2f}'
-            plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3],
-                     text.format(ringFrac, ringStd, self.corrThres),
-                     horizontalalignment='center', verticalalignment='center',
-                     bbox=dict(facecolor='white'))
-            plt.title("Correlations Histogram")
-            plt.xlabel("Value")
-            plt.ylabel("Frequency")
-            plt.savefig(os.path.join(path, folder + 'corr_hist'))
-            plt.close()
-
-#            print('Done in {0:.0f} seconds'.format(time.time() - t0))
-            folder = os.path.split(path)[1]
-            text = 'Folder ' + folder + ' done in {0:.0f} seconds'
-            self.folderStatus.setText(text.format(time.time() - t0))
-#            self.statusBar().showMessage('                 ')
-            self.fileStatus.setText('                 ')
+#            # plot histogram of the correlation values
+#            y, x, _ = plt.hist(corrArray.flatten(), bins=60,
+#                               range=(np.min(np.nan_to_num(corrArray)),
+#                                      np.max(np.nan_to_num(corrArray))))
+#            x = (x[1:] + x[:-1])/2
+#
+## ==============================================================================
+##             # Code for saving images that rely on bulk analysis
+##             ringsExp = np.zeros((nfiles, self.initShape[0],
+##                                  self.initShape[1]),
+##                                 dtype=np.single)
+##             corrExp = np.zeros((nfiles, self.initShape[0],
+##                                 self.initShape[1]),
+##                                 dtype=np.single)
+##             for i in np.arange(len(filenames)):
+##                 expanded = np.repeat(np.repeat(corrArray[i], m[1], axis=1),
+##                                      m[0], axis=0)
+## #                corrExp[i, self.crop:self.initShape[0] - self.crop,
+## #                        self.crop:self.initShape[1] - self.crop] = expanded
+##                 tiff.imsave(utils.insertSuffix(filenames[i], '_correlation'),
+##                             corrExp[i].astype(np.single), software='Gollum',
+##                             imagej=True,
+##                             resolution=(1000/self.pxSize, 1000/self.pxSize),
+##                             metadata={'spacing': 1, 'unit': 'um'})
+##
+##                 limits = np.array(self.initShape) - self.crop
+##                 rings = np.nan_to_num(corrArray[i]) > self.corrThres
+##                 ringsExp[i, self.crop:limits[0],
+##                          self.crop:limits[1]] = rings.astype(float)
+##                 tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
+##                             ringsExp[i], software='Gollum', imagej=True,
+##                             resolution=(1000/self.pxSize, 1000/self.pxSize),
+##                             metadata={'spacing': 1, 'unit': 'um'})
+## ==============================================================================
+#
+#            # Plotting
+#            plt.figure(0)
+#            validCorr = corrArray[~np.isnan(corrArray)]
+#            n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
+#            ringFrac = np.sum(validCorr > self.corrThres) / n
+#            ringStd = math.sqrt(ringFrac*(1 - ringFrac)/n)
+#            plt.bar(x, y, align='center', width=(x[1] - x[0]))
+#            plt.plot((self.corrThres, self.corrThres), (0, np.max(y)), 'r--',
+#                     linewidth=2)
+#            text = 'ringFrac={0:.3f}\pm{1:.3f} \ncorrelation threshold={2:.2f}'
+#            plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3],
+#                     text.format(ringFrac, ringStd, self.corrThres),
+#                     horizontalalignment='center', verticalalignment='center',
+#                     bbox=dict(facecolor='white'))
+#            plt.title("Correlations Histogram")
+#            plt.xlabel("Value")
+#            plt.ylabel("Frequency")
+#            plt.savefig(os.path.join(path, folder + 'corr_hist'))
+#            plt.close()
+#
+##            print('Done in {0:.0f} seconds'.format(time.time() - t0))
+#            folder = os.path.split(path)[1]
+#            text = 'Folder ' + folder + ' done in {0:.0f} seconds'
+#            self.folderStatus.setText(text.format(time.time() - t0))
+##            self.statusBar().showMessage('                 ')
+#            self.fileStatus.setText('                 ')
 
         except IndexError:
             self.fileStatus.setText('No file selected!')
@@ -537,10 +569,10 @@ class Gollum(QtGui.QMainWindow):
 #                    metadata={'spacing': 1, 'unit': 'um'})
 
     def batchSTORM(self):
-        self.batch(self.loadSTORM, 'STORM')
+        self.batch('STORM')
 
     def batchSTED(self):
-        self.batch(self.loadSTED, 'STED')
+        self.batch('STED')
 
 
 class WorkerSignals(QtCore.QObject):
@@ -566,7 +598,7 @@ class Worker(QtCore.QRunnable):
         self.meanS = np.mean(self.blocksInputS)
         self.stdS = np.std(self.blocksInputS)
 
-    def start(self):
+    def run(self):
 
         self.signals.start.emit()
         localCorr = np.zeros(len(self.blocksInput))
@@ -597,7 +629,7 @@ class Worker(QtCore.QRunnable):
         self.signals.done.emit(localCorr)
 
 
-class SingleTask(QtCore.QObject):
+class Single(QtCore.QObject):
 
     doneSignal = QtCore.pyqtSignal(np.ndarray)
 
@@ -623,79 +655,98 @@ class SingleTask(QtCore.QObject):
         worker = Worker(self.n, self.blocksInput, self.blocksInputS,
                         self.blocksMask, self.intThr, self.cArgs)
         worker.signals.done.connect(self.sendResult)
-        worker.start()
+        worker.run()
 
 
+class Batch(QtCore.QObject):
 
-#class Batch(QtCore.QObject):
-#
-#    def __init__(self):
-#        super().__init__()
-#
-#        self.pool = QThreadPool()
-#        self.pool.setMaxThreadCount(1)
-#
-#        nfiles = len(fileList)
-#        function(filenames[0])
-#        corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-#
-#        # Expand correlation array so it matches data shape
-#        corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                           dtype=np.single)
-#        corrExp[:] = np.nan
-#        ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                            dtype=np.single)
-#        ringsExp[:] = np.nan
-#
-#    def processResult(self, task):
-#        print('Receiving', task)
-#
-#    def start(self):
-#
-#        path = os.path.split(filenames[0])[0]
-#        folder = os.path.split(path)[1]
-#        self.folderStatus.setText('Processing folder ' + path)
-#        print('Processing folder', path)
-#        t0 = time.time()
-#        for i in np.arange(nfiles):
-#
-#        for task in range(10):
-#            worker = Worker(task)
-#            worker.signals.result.connect(self.processResult)
-#
-#            self.pool.start(worker)
-#
-#        self.pool.waitForDone()
+    startSignal = QtCore.pyqtSignal(str)
 
+    def __init__(self, files, pxSize, crop, gaussSigma, intThres, cArgs):
+        super().__init__()
 
-#class BatchWorker(QtCore.QObject):
-#
-#    doneSignal = QtCore.pyqtSignal(np.ndarray)
-#    fileStartSignal =
-#
-#    def __init__(self, function, fileList, *args, **kwargs):
-#        super().__init__(*args, **kwargs)
-#
-#        nfiles = len(fileList)
-#        function(filenames[0])
-#        corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
-#
-#        # Expand correlation array so it matches data shape
-#        corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                           dtype=np.single)
-#        corrExp[:] = np.nan
-#        ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
-#                            dtype=np.single)
-#        ringsExp[:] = np.nan
-#
-#    def start(self):
-#
-#        path = os.path.split(filenames[0])[0]
-#        folder = os.path.split(path)[1]
-#        self.folderStatus.setText('Processing folder ' + path)
-#        print('Processing folder', path)
-#        t0 = time.time()
-#        for i in np.arange(nfiles):
+        self.files = files
+        self.pxSize = pxSize
+        self.crop = crop
+        self.gaussSigma = gaussSigma/self.pxSize
+        self.intThres = intThres
+        self.cArgs = cArgs
+
+        self.pool = QtCore.QThreadPool()
+        self.pool.setMaxThreadCount(1)
+
+        self.nfiles = len(files)
+        self.subimgPxSize = 1000/self.pxSize
+
+        # Get data shape and derivates
+        im = Image.open(self.files[0])
+        inputData = np.array(im).astype(np.float64)
+        initShape = inputData.shape
+        self.bound = (np.array(inputData.shape) - self.crop).astype(np.int)
+        inputData = inputData[self.crop:self.bound[0], self.crop:self.bound[1]]
+        dataShape = inputData.shape
+        self.n = (np.array(dataShape)/self.subimgPxSize).astype(int)
+        self.mag = np.array(dataShape)/self.n
+        self.corrArray = np.zeros((self.nfiles, self.n[0], self.n[1]))
+        self.path = os.path.split(self.files[0])[0]
+        self.corrExp = np.empty((self.nfiles, initShape[0], initShape[1]),
+                                dtype=np.single)
+        self.corrExp[:] = np.nan
+        self.ringsExp = np.empty((self.nfiles, initShape[0], initShape[1]),
+                                 dtype=np.single)
+        self.ringsExp[:] = np.nan
+
+    def processResult(self, localCorr):
+        self.corrArray[self.i] = localCorr
+
+        localCorrBig = np.repeat(localCorr, self.mag[0], 0)
+        localCorrBig = np.repeat(localCorrBig, self.mag[1], 1)
+
+        self.corrExp[self.i, self.crop:self.bound[0],
+                     self.crop:self.bound[1]] = localCorrBig
+
+        # Save correlation values array
+        corrName = utils.insertSuffix(self.files[self.i], '_correlation')
+        tiff.imsave(corrName, self.corrExp[self.i], software='Gollum',
+                    imagej=True, metadata={'spacing': 1, 'unit': 'um'},
+                    resolution=(1000/self.pxSize, 1000/self.pxSize))
+
+    def updateBar(self):
+        self.startSignal.emit(os.path.split(self.files[self.i])[1])
+
+    def start(self):
+
+        t0 = time.time()
+        for i in np.arange(self.nfiles):
+
+            self.i = i
+
+            # Image loading
+            im = Image.open(self.files[i])
+            inputData = np.array(im).astype(np.float64)
+            inputData = inputData[self.crop:self.bound[0],
+                                  self.crop:self.bound[1]]
+
+            inputDataS = ndi.gaussian_filter(inputData, self.gaussSigma)
+            meanS = np.mean(inputDataS)
+            stdS = np.std(inputDataS)
+
+            # binarization of image
+            mask = inputDataS < meanS + self.intThres*stdS
+            # shape the data into the subimg that we need for the analysis
+            nblocks = np.array(inputData.shape)/self.n
+            blocksInput = tools.blockshaped(inputData, *nblocks)
+            blocksInputS = tools.blockshaped(inputDataS, *nblocks)
+            blocksMask = tools.blockshaped(mask, *nblocks)
+
+            worker = Worker(self.n, blocksInput, blocksInputS, blocksMask,
+                            self.intThres, self.cArgs)
+            worker.signals.start.connect(self.updateBar)
+            worker.signals.done.connect(self.processResult)
+
+            self.pool.start(worker)
+
+        self.pool.waitForDone()
 
 
 if __name__ == '__main__':

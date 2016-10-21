@@ -95,7 +95,7 @@ class Gollum(QtGui.QMainWindow):
         loadFrame.setLayout(loadLayout)
         loadTitle = QtGui.QLabel('<strong>Load image</strong>')
         loadTitle.setTextFormat(QtCore.Qt.RichText)
-        loadLayout.addWidget(loadTitle, 0, 0)
+        loadLayout.addWidget(loadTitle, 0, 0, 1, 2)
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
         self.STORMPxEdit = QtGui.QLineEdit('13.3')
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
@@ -137,7 +137,7 @@ class Gollum(QtGui.QMainWindow):
         settingsFrame.setLayout(settingsLayout)
         settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
-        settingsLayout.addWidget(settingsTitle, 0, 0)
+        settingsLayout.addWidget(settingsTitle, 0, 0, 1, 2)
 #        settingsLayout.addWidget(self.intThrLabel, 1, 0)
 #        settingsLayout.addWidget(self.intThresEdit, 1, 1)
 #        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
@@ -178,7 +178,7 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout.addWidget(self.ringImgWidget, 1, 2, 2, 1)
         self.mainLayout.setColumnMinimumWidth(1, 600)
         self.mainLayout.setColumnMinimumWidth(2, 600)
-        self.buttonWidget.setFixedWidth(250)
+        self.buttonWidget.setFixedWidth(200)
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
@@ -353,6 +353,7 @@ class Gollum(QtGui.QMainWindow):
                     self.localCorr[i] = np.nan
 
             self.localCorr = self.localCorr.reshape(*self.n)
+            self.updateGUI(self.localCorr)
 
         else:
             self.corrResult.clear()
