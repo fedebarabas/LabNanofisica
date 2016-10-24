@@ -290,17 +290,23 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             return False
 
     def loadSTED(self, filename=None):
+        prevSigma = self.main.sigmaEdit.text()
+        prevThres = self.main.intThresEdit.text()
+        self.main.sigmaEdit.setText('100')
+        self.main.intThresEdit.setText('0.5')
         load = self.loadImage('STED', np.float(self.main.STEDPxEdit.text()),
                               filename=filename)
-        if load:
-            self.main.sigmaEdit.setText('100')
-<<<<<<< HEAD
-            self.main.intThresEdit.setText('1')
-=======
-            self.main.intThresEdit.setText('0.5')
->>>>>>> 1a01d3d0f6518bf1e1f007e7109bdce5cb5a8680
+        if not(load):
+            self.main.sigmaEdit.setText(prevSigma)
+            self.main.intThresEdit.setText(prevThres)
 
     def loadSTORM(self, filename=None):
+        prevSigma = self.main.sigmaEdit.text()
+        prevThres = self.main.intThresEdit.text()
+        self.corrImgHist.setLevels(0, 3)
+        self.ringImgHist.setLevels(0, 3)
+        self.main.sigmaEdit.setText('100')
+        self.main.intThresEdit.setText('0.5')
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those 3px borders before running the
@@ -308,12 +314,12 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         mag = np.float(self.main.magnificationEdit.text())
         load = self.loadImage('STORM', np.float(self.main.STORMPxEdit.text()),
                               crop=3*mag, filename=filename)
-        if load:
-            self.inputImgHist.setLevels(0, 3)
-            self.main.sigmaEdit.setText('100')
-            self.main.intThresEdit.setText('0.5')
+        if not(load):
+            self.main.sigmaEdit.setText(prevSigma)
+            self.main.intThresEdit.setText(prevThres)
 
     def updateImage(self):
+
         self.gaussSigma = np.float(self.main.sigmaEdit.text())/self.pxSize
         self.inputDataS = ndi.gaussian_filter(self.inputData,
                                               self.gaussSigma)

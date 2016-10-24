@@ -8,3 +8,5 @@
 *.png
 *.npy
 *.dat
+/build/*
+/dist/*
