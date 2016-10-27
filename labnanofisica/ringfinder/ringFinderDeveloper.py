@@ -303,8 +303,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def loadSTORM(self, filename=None):
         prevSigma = self.main.sigmaEdit.text()
         prevThres = self.main.intThresEdit.text()
-        self.corrImgHist.setLevels(0, 3)
-        self.ringImgHist.setLevels(0, 3)
+        self.main.inputImgHist.setLevels(0, 3)
         self.main.sigmaEdit.setText('100')
         self.main.intThresEdit.setText('0.5')
         # The STORM image has black borders because it's not possible to
