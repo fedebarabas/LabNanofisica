@@ -239,8 +239,7 @@ def fitMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
                 x1, y1 = xp, yp
 
 
-
-def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
+def corrMethod(data, mask, minLen, thStep, deltaTh, wvlen, sinPow,
                developer=False):
     """Searches for rings by correlating the image data with a given
     sinusoidal pattern
@@ -280,11 +279,12 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
         # result = 0 means there's a neuron in the block but no rings are found
         # result = np.nan means there's no neuron in the block
         corrPhaseArg = np.zeros(np.size(theta))
+        corrPhaseArg[:] = np.nan
         corrTheta = np.zeros(np.size(theta))
-        corrMax = 0
-        thetaMax = 0
-        phaseMax = 0
-        rings = False
+        corrTheta[:] = np.nan
+        corrMax = np.nan
+        thetaMax = np.nan
+        phaseMax = np.nan
 
     else:
 
@@ -329,9 +329,9 @@ def corrMethod(data, mask, thres, minLen, thStep, deltaTh, wvlen, sinPow,
         phaseMax = corrPhaseArg[ix][i]
         corrMax = np.max(corrTheta[ix])
 
-        rings = corrMax > thres
+#        rings = corrMax > thres
 
-    return th0, corrTheta, corrMax, thetaMax, phaseMax, rings
+    return th0, corrTheta, corrMax, thetaMax, phaseMax  # , rings
 
 
 def FFTMethod(data, thres=0.4):

@@ -34,15 +34,12 @@ class Gollum(QtGui.QMainWindow):
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&Run')
-        batchSTORMAction = QtGui.QAction('Analyze batch of STORM images...',
-                                         self)
-        batchSTEDAction = QtGui.QAction('Analyze batch of STED images...',
-                                        self)
-
-        batchSTORMAction.triggered.connect(self.batchSTORM)
-        batchSTEDAction.triggered.connect(self.batchSTED)
-        fileMenu.addAction(batchSTORMAction)
-        fileMenu.addAction(batchSTEDAction)
+        batchSTORMAct = QtGui.QAction('Analyze batch of STORM images...', self)
+        batchSTEDAct = QtGui.QAction('Analyze batch of STED images...', self)
+        batchSTORMAct.triggered.connect(self.batchSTORM)
+        batchSTEDAct.triggered.connect(self.batchSTED)
+        fileMenu.addAction(batchSTORMAct)
+        fileMenu.addAction(batchSTEDAct)
         fileMenu.addSeparator()
 
         exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)
@@ -128,7 +125,6 @@ class Gollum(QtGui.QMainWindow):
         self.thetaStepEdit = QtGui.QLineEdit('3')
         self.deltaAngleEdit = QtGui.QLineEdit('20')
         self.sinPowerEdit = QtGui.QLineEdit('6')
-        self.wvlenEdit = QtGui.QLineEdit('180')
         self.corrButton = QtGui.QPushButton('Correlation')
         self.corrButton.setCheckable(True)
         settingsFrame = QtGui.QFrame(self)
@@ -138,31 +134,17 @@ class Gollum(QtGui.QMainWindow):
         settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
         settingsLayout.addWidget(settingsTitle, 0, 0, 1, 2)
-#        settingsLayout.addWidget(self.intThrLabel, 1, 0)
-#        settingsLayout.addWidget(self.intThresEdit, 1, 1)
-#        gaussianSigmaLabel = QtGui.QLabel('Gaussian filter sigma [nm]')
-#        settingsLayout.addWidget(gaussianSigmaLabel, 2, 0)
-#        settingsLayout.addWidget(self.sigmaEdit, 2, 1)
-#        minLenLabel = QtGui.QLabel('Direction lines min length [nm]')
-#        settingsLayout.addWidget(minLenLabel, 3, 0)
-#        settingsLayout.addWidget(self.lineLengthEdit, 3, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 4, 0)
-        settingsLayout.addWidget(self.corrThresEdit, 4, 1)
-        settingsLayout.addWidget(self.corrSlider, 5, 0, 1, 2)
-        settingsLayout.addWidget(self.showCorrMapCheck, 6, 0, 1, 2)
-#        settingsLayout.addWidget(QtGui.QLabel('Angular step [°]'), 6, 0)
-#        settingsLayout.addWidget(self.thetaStepEdit, 6, 1)
-#        settingsLayout.addWidget(QtGui.QLabel('Delta Angle [°]'), 7, 0)
-#        settingsLayout.addWidget(self.deltaAngleEdit, 7, 1)
-#        powLabel = QtGui.QLabel('Sinusoidal pattern power')
-#        settingsLayout.addWidget(powLabel, 8, 0)
-#        settingsLayout.addWidget(self.sinPowerEdit, 8, 1)
-#        wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
-#        settingsLayout.addWidget(wvlenLabel, 9, 0)
-#        settingsLayout.addWidget(self.wvlenEdit, 9, 1)
-        settingsLayout.addWidget(self.corrButton, 10, 0, 1, 2)
+        wvlenLabel = QtGui.QLabel('Rings periodicity [nm]')
+        self.wvlenEdit = QtGui.QLineEdit('180')
+        settingsLayout.addWidget(wvlenLabel, 1, 0)
+        settingsLayout.addWidget(self.wvlenEdit, 1, 1)
+        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 2, 0)
+        settingsLayout.addWidget(self.corrThresEdit, 2, 1)
+        settingsLayout.addWidget(self.corrSlider, 3, 0, 1, 2)
+        settingsLayout.addWidget(self.showCorrMapCheck, 4, 0, 1, 2)
+        settingsLayout.addWidget(self.corrButton, 5, 0, 1, 2)
         loadLayout.setColumnMinimumWidth(1, 40)
-        settingsFrame.setFixedHeight(150)
+        settingsFrame.setFixedHeight(180)
 
         self.buttonWidget = QtGui.QWidget()
         buttonsLayout = QtGui.QGridLayout()
@@ -172,9 +154,13 @@ class Gollum(QtGui.QMainWindow):
 
         # layout of the three widgets
         self.mainLayout.addWidget(self.buttonWidget, 1, 0)
-        self.mainLayout.addWidget(QtGui.QLabel('Correlation'), 0, 1)
+        corrLabel = QtGui.QLabel('Correlation')
+        corrLabel.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self.mainLayout.addWidget(corrLabel, 0, 1)
         self.mainLayout.addWidget(self.corrImgWidget, 1, 1, 2, 1)
-        self.mainLayout.addWidget(QtGui.QLabel('Rings'), 0, 2)
+        ringLabel = QtGui.QLabel('Rings')
+        ringLabel.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self.mainLayout.addWidget(ringLabel, 0, 2)
         self.mainLayout.addWidget(self.ringImgWidget, 1, 2, 2, 1)
         self.mainLayout.setColumnMinimumWidth(1, 600)
         self.mainLayout.setColumnMinimumWidth(2, 600)
@@ -321,18 +307,16 @@ class Gollum(QtGui.QMainWindow):
 
             # for each subimg, we apply the correlation method for ring finding
             intThr = np.float(self.intThresEdit.text())
-            corrThres = np.float(self.corrThresEdit.text())
             minLen = np.float(self.lineLengthEdit.text())/self.pxSize
             thetaStep = np.float(self.deltaAngleEdit.text())
             deltaTh = np.float(self.deltaAngleEdit.text())
             wvlen = np.float(self.wvlenEdit.text())/self.pxSize
             sinPow = np.float(self.sinPowerEdit.text())
-            cArgs = corrThres, minLen, thetaStep, deltaTh, wvlen, sinPow
+            cArgs = minLen, thetaStep, deltaTh, wvlen, sinPow
 
             # Single-core code
             self.localCorr = np.zeros(len(blocksInput))
             for i in np.arange(len(blocksInput)):
-                rings = False
                 block = blocksInput[i]
                 blockS = blocksInputS[i]
                 mask = blocksMask[i]
@@ -346,7 +330,7 @@ class Gollum(QtGui.QMainWindow):
                 thres = self.meanS + intThr*self.stdS
                 if np.any(blockS > thres) and neuronFrac > 0.25:
                     output = tools.corrMethod(block, mask, *cArgs)
-                    angle, corrTheta, corrMax, theta, phase, rings = output
+                    angle, corrTheta, corrMax, theta, phase = output
                     # Store results
                     self.localCorr[i] = corrMax
                 else:
@@ -427,7 +411,6 @@ class Gollum(QtGui.QMainWindow):
                 corrExp[i, self.crop:bound[0],
                         self.crop:bound[1]] = self.localCorrBig
 
-
                 # Save correlation values array
                 corrName = utils.insertSuffix(filenames[i], '_correlation')
                 tiff.imsave(corrName, corrExp[i], software='Gollum',
@@ -447,52 +430,32 @@ class Gollum(QtGui.QMainWindow):
                             metadata={'spacing': 1, 'unit': 'um'})
 
             # plot histogram of the correlation values
-            y, x, _ = plt.hist(corrArray.flatten(), bins=60,
-                               range=(np.min(np.nan_to_num(corrArray)),
-                                      np.max(np.nan_to_num(corrArray))))
+            hrange = (np.min(np.nan_to_num(corrArray)),
+                      np.max(np.nan_to_num(corrArray)))
+            y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hrange)
             x = (x[1:] + x[:-1])/2
-
-# ==============================================================================
-#             # Code for saving images that rely on bulk analysis
-#             ringsExp = np.zeros((nfiles, self.initShape[0],
-#                                  self.initShape[1]),
-#                                 dtype=np.single)
-#             corrExp = np.zeros((nfiles, self.initShape[0],
-#                                 self.initShape[1]),
-#                                 dtype=np.single)
-#             for i in np.arange(len(filenames)):
-#                 expanded = np.repeat(np.repeat(corrArray[i], m[1], axis=1),
-#                                      m[0], axis=0)
-# #                corrExp[i, self.crop:self.initShape[0] - self.crop,
-# #                        self.crop:self.initShape[1] - self.crop] = expanded
-#                 tiff.imsave(utils.insertSuffix(filenames[i], '_correlation'),
-#                             corrExp[i].astype(np.single), software='Gollum',
-#                             imagej=True,
-#                             resolution=(1000/self.pxSize, 1000/self.pxSize),
-#                             metadata={'spacing': 1, 'unit': 'um'})
-#
-#                 limits = np.array(self.initShape) - self.crop
-#                 rings = np.nan_to_num(corrArray[i]) > self.corrThres
-#                 ringsExp[i, self.crop:limits[0],
-#                          self.crop:limits[1]] = rings.astype(float)
-#                 tiff.imsave(utils.insertSuffix(filenames[i], '_rings'),
-#                             ringsExp[i], software='Gollum', imagej=True,
-#                             resolution=(1000/self.pxSize, 1000/self.pxSize),
-#                             metadata={'spacing': 1, 'unit': 'um'})
-# ==============================================================================
 
             # Plotting
             plt.figure(0)
             validCorr = corrArray[~np.isnan(corrArray)]
+            valuesTxt = os.path.join(path, folder + 'corr_values.txt')
+            np.savetxt(valuesTxt, validCorr)
+            ringData = validCorr[validCorr > self.corrThres]
             n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
-            ringFrac = np.sum(validCorr > self.corrThres) / n
+            nring = np.sum(validCorr > self.corrThres)
+            ringFrac = nring / n
             ringStd = math.sqrt(ringFrac*(1 - ringFrac)/n)
             plt.bar(x, y, align='center', width=(x[1] - x[0]))
             plt.plot((self.corrThres, self.corrThres), (0, np.max(y)), 'r--',
                      linewidth=2)
-            text = 'ringFrac={0:.3f}\pm{1:.3f} \ncorrelation threshold={2:.2f}'
-            plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3],
-                     text.format(ringFrac, ringStd, self.corrThres),
+            text = ('ringFrac={0:.3f} +- {1:.3f} \n'
+                    'correlation threshold={2:.2f} \n'
+                    'mean correlation={3:.2f} +- {4:.3f} \n'
+                    'mean ring correlation={5:.2f} +- {6:.3f}')
+            text = text.format(ringFrac, ringStd, self.corrThres,
+                               np.mean(validCorr), np.std(validCorr)/n,
+                               np.mean(ringData), np.std(ringData)/nring)
+            plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3], text,
                      horizontalalignment='center', verticalalignment='center',
                      bbox=dict(facecolor='white'))
             plt.title("Correlations Histogram")
@@ -508,7 +471,6 @@ class Gollum(QtGui.QMainWindow):
 
         except IndexError:
             self.fileStatus.setText('No file selected!')
-
 
     def batchSTORM(self):
         self.batch(self.loadSTORM, 'STORM')

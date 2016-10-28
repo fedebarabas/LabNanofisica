@@ -86,7 +86,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
         self.lineLengthLabel = QtGui.QLabel('Direction lines min length [nm]')
         # Direction lines lengths are expressed in fraction of subimg size
-        self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern [nm]')
+        self.wvlenLabel = QtGui.QLabel('Ring periodicity [nm]')
 
         settingsFrame = QtGui.QFrame(self)
         settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
@@ -370,16 +370,14 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
             # we apply the correlation method for ring finding for the
             # selected subimg
-            corrThres = np.float(self.main.corrThresEdit.text())
             minLen = np.float(self.main.lineLengthEdit.text()) / self.pxSize
             thStep = np.float(self.main.thetaStepEdit.text())
             deltaTh = np.float(self.main.deltaThEdit.text())
             wvlen = np.float(self.main.wvlenEdit.text()) / self.pxSize
             sinPow = np.float(self.main.sinPowerEdit.text())
-            args = [self.selectedMask, corrThres, minLen, thStep, deltaTh,
-                    wvlen, sinPow]
+            args = [self.selectedMask, minLen, thStep, deltaTh, wvlen, sinPow]
             output = tools.corrMethod(self.selected, *args, developer=True)
-            self.th0, corrTheta, corrMax, thetaMax, phaseMax, rings = output
+            self.th0, corrTheta, corrMax, thetaMax, phaseMax = output
 
             if np.all([self.th0, corrMax]) is not None:
                 self.bestAxon = simAxon(imSize=self.subImgSize, wvlen=wvlen,
@@ -413,6 +411,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                     self.pCorr.plot(thArea, brushMax, fillLevel=brushMin,
                                     fillBrush=(50, 50, 200, 100), pen=None)
 
+            corrThres = np.float(self.main.corrThresEdit.text())
+            rings = corrMax > corrThres
             if rings and np.abs(self.th0 - thetaMax) <= deltaTh:
                 self.main.resultLabel.setText('<strong>MY PRECIOUS!<\strong>')
             else:
