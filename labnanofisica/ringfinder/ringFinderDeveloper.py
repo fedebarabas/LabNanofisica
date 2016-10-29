@@ -303,7 +303,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def loadSTORM(self, filename=None):
         prevSigma = self.main.sigmaEdit.text()
         prevThres = self.main.intThresEdit.text()
-        self.main.inputImgHist.setLevels(0, 3)
+        self.inputImgHist.setLevels(0, 3)
         self.main.sigmaEdit.setText('100')
         self.main.intThresEdit.setText('0.5')
         # The STORM image has black borders because it's not possible to
@@ -312,7 +312,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # analysis.
         mag = np.float(self.main.magnificationEdit.text())
         load = self.loadImage('STORM', np.float(self.main.STORMPxEdit.text()),
-                              crop=3*mag, filename=filename)
+                              crop=int(3*mag), filename=filename)
         if not(load):
             self.main.sigmaEdit.setText(prevSigma)
             self.main.intThresEdit.setText(prevThres)

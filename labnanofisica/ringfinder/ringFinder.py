@@ -202,7 +202,7 @@ class Gollum(QtGui.QMainWindow):
         # analysis.
         mag = np.float(self.magnificationEdit.text())
         load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
-                              crop=3*mag, filename=filename)
+                              crop=int(3*mag), filename=filename)
         if load:
             self.corrImgHist.setLevels(0, 3)
             self.ringImgHist.setLevels(0, 3)
@@ -450,8 +450,8 @@ class Gollum(QtGui.QMainWindow):
                      linewidth=2)
             text = ('ringFrac={0:.3f} +- {1:.3f} \n'
                     'correlation threshold={2:.2f} \n'
-                    'mean correlation={3:.2f} +- {4:.3f} \n'
-                    'mean ring correlation={5:.2f} +- {6:.3f}')
+                    'mean correlation={3:.4f} +- {4:.4f} \n'
+                    'mean ring correlation={5:.4f} +- {6:.4f}')
             text = text.format(ringFrac, ringStd, self.corrThres,
                                np.mean(validCorr), np.std(validCorr)/n,
                                np.mean(ringData), np.std(ringData)/nring)
@@ -466,6 +466,7 @@ class Gollum(QtGui.QMainWindow):
 
             folder = os.path.split(path)[1]
             text = 'Folder ' + folder + ' done in {0:.0f} seconds'
+            print(text.format(time.time() - t0))
             self.folderStatus.setText(text.format(time.time() - t0))
             self.fileStatus.setText('                 ')
 
