@@ -94,15 +94,15 @@ class Gollum(QtGui.QMainWindow):
         loadTitle.setTextFormat(QtCore.Qt.RichText)
         loadLayout.addWidget(loadTitle, 0, 0, 1, 2)
         loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
-        self.STORMPxEdit = QtGui.QLineEdit('13.3')
+        self.STORMPxEdit = QtGui.QLineEdit()
         loadLayout.addWidget(self.STORMPxEdit, 1, 1)
         loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
-        self.magnificationEdit = QtGui.QLineEdit('10')
+        self.magnificationEdit = QtGui.QLineEdit()
         loadLayout.addWidget(self.magnificationEdit, 2, 1)
         self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
         loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
         loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 4, 0)
-        self.STEDPxEdit = QtGui.QLineEdit('20')
+        self.STEDPxEdit = QtGui.QLineEdit()
         loadLayout.addWidget(self.STEDPxEdit, 4, 1)
         self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
         loadLayout.addWidget(self.loadSTEDButton, 5, 0, 1, 2)
@@ -111,21 +111,21 @@ class Gollum(QtGui.QMainWindow):
 
         # Ring finding method settings frame
         self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
-        self.intThresEdit = QtGui.QLineEdit('0.5')
-        self.sigmaEdit = QtGui.QLineEdit('150')
-        self.lineLengthEdit = QtGui.QLineEdit('300')
-        defaultThreshold = 0.12
-        self.corrThresEdit = QtGui.QLineEdit(str(defaultThreshold))
+        self.intThresEdit = QtGui.QLineEdit()
+        self.sigmaEdit = QtGui.QLineEdit()
+        self.lineLengthEdit = QtGui.QLineEdit()
+        self.roiSizeEdit = QtGui.QLineEdit()
+        self.corrThresEdit = QtGui.QLineEdit('0')
         self.corrSlider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
         self.corrSlider.setMinimum(0)
         self.corrSlider.setMaximum(250)   # Divide by 1000 to get corr value
-        self.corrSlider.setValue(1000*defaultThreshold)
+        self.corrSlider.setValue(1000*float(self.corrThresEdit.text()))
         self.corrSlider.valueChanged[int].connect(self.sliderChange)
         self.showCorrMapCheck = QtGui.QCheckBox('Show correlation map', self)
-        self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.deltaAngleEdit = QtGui.QLineEdit('20')
-        self.sinPowerEdit = QtGui.QLineEdit('6')
-        self.corrButton = QtGui.QPushButton('Correlation')
+        self.thetaStepEdit = QtGui.QLineEdit()
+        self.deltaThEdit = QtGui.QLineEdit()
+        self.sinPowerEdit = QtGui.QLineEdit()
+        self.corrButton = QtGui.QPushButton('Run analysis')
         self.corrButton.setCheckable(True)
         settingsFrame = QtGui.QFrame(self)
         settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
@@ -135,16 +135,36 @@ class Gollum(QtGui.QMainWindow):
         settingsTitle.setTextFormat(QtCore.Qt.RichText)
         settingsLayout.addWidget(settingsTitle, 0, 0, 1, 2)
         wvlenLabel = QtGui.QLabel('Rings periodicity [nm]')
-        self.wvlenEdit = QtGui.QLineEdit('180')
+        self.wvlenEdit = QtGui.QLineEdit()
         settingsLayout.addWidget(wvlenLabel, 1, 0)
         settingsLayout.addWidget(self.wvlenEdit, 1, 1)
-        settingsLayout.addWidget(QtGui.QLabel('Correlation threshold'), 2, 0)
+        corrThresLabel = QtGui.QLabel('Discrimination threshold')
+        settingsLayout.addWidget(corrThresLabel, 2, 0)
         settingsLayout.addWidget(self.corrThresEdit, 2, 1)
         settingsLayout.addWidget(self.corrSlider, 3, 0, 1, 2)
         settingsLayout.addWidget(self.showCorrMapCheck, 4, 0, 1, 2)
         settingsLayout.addWidget(self.corrButton, 5, 0, 1, 2)
         loadLayout.setColumnMinimumWidth(1, 40)
         settingsFrame.setFixedHeight(180)
+
+        # Load settings configuration and then connect the update
+        try:
+            tools.loadConfig(self)
+        except:
+            tools.saveDefaultConfig()
+            tools.loadConfig(self)
+        self.STORMPxEdit.editingFinished.connect(self.updateConfig)
+        self.magnificationEdit.editingFinished.connect(self.updateConfig)
+        self.STEDPxEdit.editingFinished.connect(self.updateConfig)
+        self.roiSizeEdit.editingFinished.connect(self.updateConfig)
+        self.sigmaEdit.editingFinished.connect(self.updateConfig)
+        self.intThresEdit.editingFinished.connect(self.updateConfig)
+        self.lineLengthEdit.editingFinished.connect(self.updateConfig)
+        self.wvlenEdit.editingFinished.connect(self.updateConfig)
+        self.sinPowerEdit.editingFinished.connect(self.updateConfig)
+        self.thetaStepEdit.editingFinished.connect(self.updateConfig)
+        self.deltaThEdit.editingFinished.connect(self.updateConfig)
+        self.corrThresEdit.editingFinished.connect(self.updateConfig)
 
         self.buttonWidget = QtGui.QWidget()
         buttonsLayout = QtGui.QGridLayout()
@@ -175,6 +195,9 @@ class Gollum(QtGui.QMainWindow):
         self.initialdir = os.getcwd()
         self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
                                    'ringfinder', 'spectrinSTED.tif'))
+
+    def updateConfig(self):
+        tools.saveConfig(self)
 
     def sliderChange(self, value):
         self.corrThresEdit.setText(str(np.round(0.001*value, 2)))
@@ -308,8 +331,8 @@ class Gollum(QtGui.QMainWindow):
             # for each subimg, we apply the correlation method for ring finding
             intThr = np.float(self.intThresEdit.text())
             minLen = np.float(self.lineLengthEdit.text())/self.pxSize
-            thetaStep = np.float(self.deltaAngleEdit.text())
-            deltaTh = np.float(self.deltaAngleEdit.text())
+            thetaStep = np.float(self.thetaStepEdit.text())
+            deltaTh = np.float(self.deltaThEdit.text())
             wvlen = np.float(self.wvlenEdit.text())/self.pxSize
             sinPow = np.float(self.sinPowerEdit.text())
             cArgs = minLen, thetaStep, deltaTh, wvlen, sinPow

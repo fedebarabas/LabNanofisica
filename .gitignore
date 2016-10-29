@@ -10,3 +10,4 @@
 *.dat
 /build/*
 /dist/*
+config

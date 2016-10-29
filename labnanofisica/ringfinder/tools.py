@@ -5,8 +5,10 @@ Created on Sun Aug 14 14:53:28 2016
 @author: Luciano Masullo, Federico Barabas
 """
 
+import os
 import numpy as np
 import math
+import configparser
 from scipy.ndimage.measurements import center_of_mass
 from skimage.feature import peak_local_max
 try:
@@ -18,6 +20,70 @@ from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 
 from labnanofisica.ringfinder.neurosimulations import simAxon
+
+
+def saveConfig(main):
+
+    config = configparser.ConfigParser()
+
+    config['Loading'] = {
+        'STORM px nm': main.STORMPxEdit.text(),
+        'STORM magnification': main.magnificationEdit.text(),
+        'STED px nm': main.STEDPxEdit.text()}
+
+    config['Analysis'] = {
+        'ROI size nm': main.roiSizeEdit.text(),
+        'Gaussian sigma filter nm': main.sigmaEdit.text(),
+        'nsigmas threshold': main.intThresEdit.text(),
+        'Lines min length nm': main.lineLengthEdit.text(),
+        'Ring periodicity nm': main.wvlenEdit.text(),
+        'Sinusoidal pattern power': main.sinPowerEdit.text(),
+        'Angular step deg': main.thetaStepEdit.text(),
+        'Delta angle deg': main.deltaThEdit.text(),
+        'Discrimination threshold': main.corrThresEdit.text()}
+
+    with open(os.path.join(os.getcwd(), 'config'), 'w') as configfile:
+        config.write(configfile)
+
+
+def saveDefaultConfig():
+
+    config = configparser.ConfigParser()
+
+    config['Loading'] = {
+        'STORM px nm': '13.3', 'STORM magnification': '10', 'STED px nm': '20'}
+
+    config['Analysis'] = {
+        'ROI size nm': '1000', 'Gaussian sigma filter nm': '100',
+        'nsigmas threshold': '0.5', 'Lines min length nm': '300',
+        'Ring periodicity nm': '180', 'Sinusoidal pattern power': '6',
+        'Angular step deg': '3', 'Delta angle deg': '20',
+        'Discrimination threshold': '0.12'}
+
+    with open(os.path.join(os.getcwd(), 'config'), 'w') as configfile:
+        config.write(configfile)
+
+
+def loadConfig(main):
+
+    config = configparser.ConfigParser()
+    config.read(os.path.join(os.getcwd(), 'config'))
+
+    loadConfig = config['Loading']
+    main.STORMPxEdit.setText(loadConfig['STORM px nm'])
+    main.magnificationEdit.setText(loadConfig['STORM magnification'])
+    main.STEDPxEdit.setText(loadConfig['STED px nm'])
+
+    analysisConfig = config['Analysis']
+    main.roiSizeEdit.setText(analysisConfig['ROI size nm'])
+    main.sigmaEdit.setText(analysisConfig['Gaussian sigma filter nm'])
+    main.intThresEdit.setText(analysisConfig['nsigmas threshold'])
+    main.lineLengthEdit.setText(analysisConfig['Lines min length nm'])
+    main.wvlenEdit.setText(analysisConfig['Ring periodicity nm'])
+    main.sinPowerEdit.setText(analysisConfig['Sinusoidal pattern power'])
+    main.thetaStepEdit.setText(analysisConfig['Angular step deg'])
+    main.deltaThEdit.setText(analysisConfig['Delta angle deg'])
+    main.corrThresEdit.setText(analysisConfig['Discrimination threshold'])
 
 
 def pearson(a, b):
