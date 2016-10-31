@@ -249,59 +249,65 @@ class ImageWidget(pg.GraphicsLayoutWidget):
 
     def loadImage(self, tech, pxSize, crop=0, filename=None):
 
-        if not(isinstance(filename, str)):
-            self.filename = utils.getFilename('Load ' + tech + ' image',
-                                              [('Tiff file', '.tif')],
-                                              self.initialdir)
-        else:
-            self.filename = filename
+        try:
 
-        if self.filename is not None:
+            if not(isinstance(filename, str)):
+                self.filename = utils.getFilename('Load ' + tech + ' image',
+                                                  [('Tiff file', '.tif')],
+                                                  self.initialdir)
+            else:
+                self.filename = filename
 
-            self.initialdir = os.path.split(self.filename)[0]
-            self.pxSize = pxSize
-            self.inputVb.clear()
+            if self.filename is not None:
 
-            # Image loading
-            im = Image.open(self.filename)
-            self.inputData = np.array(im).astype(np.float64)
-            self.shape = self.inputData.shape
-            self.inputData = self.inputData[crop:self.shape[0] - crop,
-                                            crop:self.shape[1] - crop]
-            self.shape = self.inputData.shape
+                self.initialdir = os.path.split(self.filename)[0]
+                self.pxSize = pxSize
+                self.inputVb.clear()
 
-            self.showIm = np.fliplr(np.transpose(self.inputData))
+                # Image loading
+                im = Image.open(self.filename)
+                self.inputData = np.array(im).astype(np.float64)
+                self.shape = self.inputData.shape
+                self.inputData = self.inputData[crop:self.shape[0] - crop,
+                                                crop:self.shape[1] - crop]
+                self.shape = self.inputData.shape
 
-            # Image plotting
-            self.inputImg = pg.ImageItem()
-            self.inputVb.addItem(self.inputImg)
-            self.inputVb.setAspectLocked(True)
-            self.inputImg.setImage(self.showIm)
-            self.inputImgHist.setImageItem(self.inputImg)
-            self.addItem(self.inputImgHist, row=0, col=1)
-            self.inputVb.addItem(self.roi)
-            self.inputVb.addItem(self.thresBlockIm)
-            self.inputVb.addItem(self.thresIm)
+                self.showIm = np.fliplr(np.transpose(self.inputData))
 
-            self.updateImage()
+                # Image plotting
+                self.inputImg = pg.ImageItem()
+                self.inputVb.addItem(self.inputImg)
+                self.inputVb.setAspectLocked(True)
+                self.inputImg.setImage(self.showIm)
+                self.inputImgHist.setImageItem(self.inputImg)
+                self.addItem(self.inputImgHist, row=0, col=1)
+                self.inputVb.addItem(self.roi)
+                self.inputVb.addItem(self.thresBlockIm)
+                self.inputVb.addItem(self.thresIm)
 
-            # We need n 1um-sized subimages
-            self.subimgPxSize = float(self.main.roiSizeEdit.text())/self.pxSize
-            self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
-            self.grid = tools.Grid(self.inputVb, self.shape, self.n)
+                self.updateImage()
 
-            self.inputVb.setLimits(xMin=-0.05*self.shape[0],
-                                   xMax=1.05*self.shape[0], minXRange=4,
-                                   yMin=-0.05*self.shape[1],
-                                   yMax=1.05*self.shape[1], minYRange=4)
+                # We need n 1um-sized subimages
+                self.subimgPxSize = float(self.main.roiSizeEdit.text())
+                self.subimgPxSize /= self.pxSize
+                self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
+                self.grid = tools.Grid(self.inputVb, self.shape, self.n)
 
-            self.updateROI()
-            self.updatePlot()
+                self.inputVb.setLimits(xMin=-0.05*self.shape[0],
+                                       xMax=1.05*self.shape[0], minXRange=4,
+                                       yMin=-0.05*self.shape[1],
+                                       yMax=1.05*self.shape[1], minYRange=4)
 
-            return True
+                self.updateROI()
+                self.updatePlot()
 
-        else:
-            return False
+                return True
+
+            else:
+                return False
+
+        except OSError:
+            self.fileStatus.setText('No file selected!')
 
     def loadSTED(self, filename=None):
         prevSigma = self.main.sigmaEdit.text()
