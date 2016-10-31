@@ -221,9 +221,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.roi.setOpacity(0.5)
 
         # Load sample STED image
-        self.initialdir = os.getcwd()
-        self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrinSTED.tif'))
+        folder = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder')
+        if os.path.exists(folder):
+            self.loadSTED(os.path.join(folder, 'spectrinSTED.tif'))
+        else:
+            self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
         # Correlation
         self.pCorr = pg.PlotItem(title='Correlation')
@@ -254,7 +256,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             if not(isinstance(filename, str)):
                 self.filename = utils.getFilename('Load ' + tech + ' image',
                                                   [('Tiff file', '.tif')],
-                                                  self.initialdir)
+                                                  os.getcwd())
             else:
                 self.filename = filename
 

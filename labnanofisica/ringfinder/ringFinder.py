@@ -192,9 +192,11 @@ class Gollum(QtGui.QMainWindow):
         self.corrButton.clicked.connect(self.ringFinder)
 
         # Load sample STED image
-        self.initialdir = os.getcwd()
-        self.loadSTED(os.path.join(self.initialdir, 'labnanofisica',
-                                   'ringfinder', 'spectrinSTED.tif'))
+        folder = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder')
+        if os.path.exists(folder):
+            self.loadSTED(os.path.join(folder, 'spectrinSTED.tif'))
+        else:
+            self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
     def updateConfig(self):
         tools.saveConfig(self)
@@ -239,7 +241,7 @@ class Gollum(QtGui.QMainWindow):
             if not(isinstance(filename, str)):
                 self.filename = utils.getFilename('Load ' + tt + ' image',
                                                   [('Tiff file', '.tif')],
-                                                  self.initialdir)
+                                                  os.getcwd())
             else:
                 self.filename = filename
 
