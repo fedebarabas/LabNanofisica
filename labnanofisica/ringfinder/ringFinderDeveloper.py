@@ -307,7 +307,7 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                 return False
 
         except OSError:
-            self.fileStatus.setText('No file selected!')
+            print('No file selected!')
 
     def loadSTED(self, filename=None):
         prevSigma = self.main.sigmaEdit.text()
