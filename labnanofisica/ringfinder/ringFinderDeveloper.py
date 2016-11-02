@@ -60,8 +60,8 @@ class GollumDeveloper(QtGui.QMainWindow):
         intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
         self.intThresEdit = QtGui.QLineEdit()
         text = 'Intensity and neuron content discrimination'
-        intThrButton = QtGui.QPushButton(text)
-        intThrButton.setCheckable(True)
+        self.intThrButton = QtGui.QPushButton(text)
+        self.intThrButton.setCheckable(True)
         filterImageButton = QtGui.QPushButton('Filter Image')
         lineLengthLabel = QtGui.QLabel('Direction lines min length [nm]')
         self.lineLengthEdit = QtGui.QLineEdit()
@@ -93,7 +93,7 @@ class GollumDeveloper(QtGui.QMainWindow):
         settingsLayout.addWidget(self.sigmaEdit, 2, 1)
         settingsLayout.addWidget(intThrLabel, 3, 0)
         settingsLayout.addWidget(self.intThresEdit, 3, 1)
-        settingsLayout.addWidget(intThrButton, 4, 0, 1, 2)
+        settingsLayout.addWidget(self.intThrButton, 4, 0, 1, 2)
         settingsLayout.addWidget(filterImageButton, 5, 0, 1, 2)
         settingsLayout.addWidget(lineLengthLabel, 6, 0)
         settingsLayout.addWidget(self.lineLengthEdit, 6, 1)
@@ -154,7 +154,7 @@ class GollumDeveloper(QtGui.QMainWindow):
 
         filterImageButton.clicked.connect(self.imageWidget.imageFilter)
         dirButton.clicked.connect(self.imageWidget.getDirection)
-        intThrButton.clicked.connect(self.imageWidget.intThreshold)
+        self.intThrButton.clicked.connect(self.imageWidget.intThreshold)
         corrButton.clicked.connect(self.imageWidget.corrMethodGUI)
 
     def updateConfig(self):
