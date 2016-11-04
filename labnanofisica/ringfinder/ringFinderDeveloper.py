@@ -143,8 +143,8 @@ class GollumDeveloper(QtGui.QMainWindow):
         layout.addWidget(buttonWidget, 0, 0)
         self.imageWidget = ImageWidget(self)
         layout.addWidget(self.imageWidget, 0, 1)
-        layout.setColumnMinimumWidth(1, 1000)
-        layout.setRowMinimumHeight(0, 850)
+        layout.setColumnMinimumWidth(1, 1060)
+        layout.setRowMinimumHeight(0, 825)
 
         self.roiSizeEdit.textChanged.connect(self.imageWidget.updateROI)
         self.sigmaEdit.textChanged.connect(self.imageWidget.updateImage)
@@ -209,8 +209,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         subimgHist.gradient.loadPreset('thermal')
         self.addItem(subimgHist, row=1, col=1)
 
-        self.subImgPlot = pg.PlotItem(title="Subimage")
+        self.subImgPlot = pg.PlotItem()
         self.subImgPlot.addItem(self.subImg)
+        self.subImgPlot.hideAxis('left')
+        self.subImgPlot.hideAxis('bottom')
         self.addItem(self.subImgPlot, row=1, col=0)
 
         # Custom ROI for selecting an image region
@@ -228,7 +230,8 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
         # Correlation
-        self.pCorr = pg.PlotItem(title='Correlation')
+        self.pCorr = pg.PlotItem(labels={'left': ('Degree of periodicity'),
+                                         'bottom': ('Angle', 'deg')})
         self.pCorr.showGrid(x=True, y=True)
         self.addItem(self.pCorr, row=0, col=2)
 
@@ -248,6 +251,11 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         self.addItem(overlay_hist, row=1, col=3)
 
         self.roi.sigRegionChanged.connect(self.updatePlot)
+
+        self.ci.layout.setRowFixedHeight(0, 400)
+        self.ci.layout.setRowFixedHeight(1, 400)
+        self.ci.layout.setColumnFixedWidth(0, 400)
+        self.ci.layout.setColumnFixedWidth(2, 400)
 
     def loadImage(self, tech, pxSize, crop=0, filename=None):
 
@@ -411,16 +419,18 @@ class ImageWidget(pg.GraphicsLayoutWidget):
                 self.img1.setImage(self.bestAxon.filled(0))
                 self.img2.setImage(self.selected)
 
+                shape = self.selected.shape
+                self.vb4.setLimits(xMin=-0.05*shape[0], xMax=1.05*shape[0],
+                                   yMin=-0.05*shape[1], yMax=1.05*shape[1],
+                                   minXRange=4, minYRange=4)
+                self.vb4.setRange(xRange=(0, shape[0]), yRange=(0, shape[1]))
+
                 # plot the threshold of correlation chosen by the user
                 # phase steps are set to 20, TO DO: explore this parameter
                 theta = np.arange(np.min([self.th0 - deltaTh, 0]), 180, thStep)
                 pen1 = pg.mkPen(color=(0, 255, 100), width=2,
                                 style=QtCore.Qt.SolidLine, antialias=True)
-#                pen2 = pg.mkPen(color=(255, 50, 60), width=1,
-#                                style=QtCore.Qt.SolidLine, antialias=True)
                 self.pCorr.plot(theta, corrTheta, pen=pen1)
-#                self.pCorr.plot(theta, corrThres*np.ones(np.size(theta)),
-#                                pen=pen2)
 
                 # plot the area within deltaTh from the found direction
                 if self.th0 is not None:
