@@ -460,11 +460,17 @@ class Gollum(QtGui.QMainWindow):
             y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hrange)
             x = (x[1:] + x[:-1])/2
 
+            # Save data array as txt
+            corrArrayFlat = corrArray.flatten()
+            validCorr = corrArrayFlat[~np.isnan(corrArrayFlat)]
+            validArr = np.repeat(np.arange(nfiles), np.prod(self.n))
+            validArr = validArr[~np.isnan(corrArrayFlat)]
+            valuesTxt = os.path.join(path, folder + 'corr_values.txt')
+            np.savetxt(valuesTxt, np.stack((validCorr, validArr), 1),
+                       fmt='%f\t%i')
+
             # Plotting
             plt.figure(0)
-            validCorr = corrArray[~np.isnan(corrArray)]
-            valuesTxt = os.path.join(path, folder + 'corr_values.txt')
-            np.savetxt(valuesTxt, validCorr)
             ringData = validCorr[validCorr > self.corrThres]
             n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
             nring = np.sum(validCorr > self.corrThres)
