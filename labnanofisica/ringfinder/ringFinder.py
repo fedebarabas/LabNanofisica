@@ -2,602 +2,516 @@
 """
 Created on Fri Jul 15 12:25:40 2016
 
-@author: Cibion
+@author: Luciano Masullo, Federico Barabas
 """
 
-from scipy import ndimage as ndi
-import matplotlib.pyplot as plt
-from skimage.feature import peak_local_max
-from skimage import filters
-from skimage.transform import (hough_line, hough_line_peaks,
-                               probabilistic_hough_line)
-from skimage.filters import threshold_otsu, sobel
+import os
+import time
+import math
 import numpy as np
+from scipy import ndimage as ndi
+import tifffile as tiff
 from PIL import Image
-from labnanofisica.ringfinder.neurosimulations import simAxon
+import matplotlib.pyplot as plt
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
-from tkinter import Tk, filedialog, simpledialog
+from pyqtgraph.Qt import QtGui, QtCore
+
+import labnanofisica.utils as utils
+import labnanofisica.ringfinder.tools as tools
 
 
-def getFilename(title, types, initialdir=None):
-
-    try:
-        root = Tk()
-        root.withdraw()
-        filename = filedialog.askopenfilename(title=title, filetypes=types,
-                                              initialdir=initialdir)
-        root.destroy()
-        return filename
-    except OSError:
-        print("No file selected!")
-
-
-def corr2(a, b):
-    """2D pearson coefficient of two matrixes a and b"""
-
-    # Calculating mean values
-    AM = np.mean(a)
-    BM = np.mean(b)
-
-    # Vectorized versions of c,d,e
-
-    c_vect = (a-AM)*(b-BM)
-    d_vect = (a-AM)**2
-    e_vect = (b-BM)**2
-
-    # Finally get r using those vectorized versions
-    r_out = np.sum(c_vect)/float(np.sqrt(np.sum(d_vect)*np.sum(e_vect)))
-
-    return r_out
-
-
-def dist(a, b):
-    """Euclidean distance between a and b"""
-
-    out = np.linalg.norm(a-b)
-
-    return out
-
-
-def cosTheta(a, b):
-    """Angle between two vectors a and b"""
-
-    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
-        return 0
-
-    cosTheta = np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
-
-    return cosTheta
-
-
-def blockshaped(arr, nrows, ncols):
-    """
-    Return an array of shape (n, nrows, ncols) where
-    n * nrows * ncols = arr.size
-
-    If arr is a 2D array, the returned array should look like n subblocks with
-    each subblock preserving the "physical" layout of arr.
-    """
-    h, w = arr.shape
-    return (arr.reshape(h//nrows, nrows, -1, ncols)
-               .swapaxes(1, 2)
-               .reshape(-1, nrows, ncols))
-
-
-def firstNmax(coord, image, N):
-    """Returns the first N max in an image from an array of coord of the max
-       in the image"""
-
-    if np.shape(coord)[0] < N:
-        return []
-    else:
-        aux = np.zeros(np.shape(coord)[0])
-        for i in np.arange(np.shape(coord)[0]):
-            aux[i] = image[coord[i, 0], coord[i, 1]]
-
-        auxmax = aux.argsort()[-N:][::-1]
-
-        coordinates3 = []
-        for i in np.arange(0, N):
-            coordinates3.append(coord[auxmax[i]])
-
-        coord3 = np.asarray(coordinates3)
-
-        return coord3
-
-
-def arrayExt(array):
-    """Extends an array in a specific way"""
-
-    y = array[::-1]
-    z = []
-    z.append(y)
-    z.append(array)
-    z.append(y)
-    z = np.array(z)
-    z = np.reshape(z, 3*np.size(array))
-
-    return z
-
-
-class RingAnalizer(QtGui.QMainWindow):
+class Gollum(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
-
         super().__init__(*args, **kwargs)
 
         self.i = 0
-
-        # number of subimg (side)
-        self.subimgNum = 10
 
         self.setWindowTitle('Gollum: the Ring Finder')
 
         self.cwidget = QtGui.QWidget()
         self.setCentralWidget(self.cwidget)
 
-        # Main Widgets' layout
+        menubar = self.menuBar()
+        fileMenu = menubar.addMenu('&Run')
+        batchSTORMAct = QtGui.QAction('Analyze batch of STORM images...', self)
+        batchSTEDAct = QtGui.QAction('Analyze batch of STED images...', self)
+        batchSTORMAct.triggered.connect(self.batchSTORM)
+        batchSTEDAct.triggered.connect(self.batchSTED)
+        fileMenu.addAction(batchSTORMAct)
+        fileMenu.addAction(batchSTEDAct)
+        fileMenu.addSeparator()
 
+        exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)
+        exitAction.setShortcut('Ctrl+Q')
+        exitAction.setStatusTip('Exit application')
+        exitAction.triggered.connect(QtGui.QApplication.closeAllWindows)
+        fileMenu.addAction(exitAction)
+
+        self.folderStatus = QtGui.QLabel('Ready', self)
+        self.statusBar().addPermanentWidget(self.folderStatus, 1)
+        self.fileStatus = QtGui.QLabel('Ready', self)
+        self.statusBar().addPermanentWidget(self.fileStatus)
+
+        # Main Widgets' layout
         self.mainLayout = QtGui.QGridLayout()
         self.cwidget.setLayout(self.mainLayout)
 
-        # input, output and buttons widgets
+        # Image with correlation results
+        self.corrImgWidget = pg.GraphicsLayoutWidget()
+        self.corrImgItem = pg.ImageItem()
+        self.corrVb = self.corrImgWidget.addViewBox(col=0, row=0)
+        self.corrVb.setAspectLocked(True)
+        self.corrVb.addItem(self.corrImgItem)
+        self.corrImgHist = pg.HistogramLUTItem()
+        self.corrImgHist.gradient.loadPreset('thermal')
+        self.corrImgHist.setImageItem(self.corrImgItem)
+        self.corrImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.corrImgWidget.addItem(self.corrImgHist)
+        self.corrResult = pg.ImageItem()
+        self.corrVb.addItem(self.corrResult)
 
-        self.inputWidget = pg.GraphicsLayoutWidget()
-        self.outputWidget = pg.GraphicsLayoutWidget()
+        # Image with ring results
+        self.ringImgWidget = pg.GraphicsLayoutWidget()
+        self.ringImgItem = pg.ImageItem()
+        self.ringVb = self.ringImgWidget.addViewBox(col=0, row=0)
+        self.ringVb.setAspectLocked(True)
+        self.ringVb.addItem(self.ringImgItem)
+        self.ringImgHist = pg.HistogramLUTItem()
+        self.ringImgHist.gradient.loadPreset('thermal')
+        self.ringImgHist.setImageItem(self.ringImgItem)
+        self.ringImgHist.vb.setLimits(yMin=0, yMax=20000)
+        self.ringImgWidget.addItem(self.ringImgHist)
+        self.ringResult = pg.ImageItem()
+        self.ringVb.addItem(self.ringResult)
+
+        # Separate frame for loading controls
+        loadFrame = QtGui.QFrame(self)
+        loadFrame.setFrameStyle(QtGui.QFrame.Panel)
+        loadLayout = QtGui.QGridLayout()
+        loadFrame.setLayout(loadLayout)
+        loadTitle = QtGui.QLabel('<strong>Load image</strong>')
+        loadTitle.setTextFormat(QtCore.Qt.RichText)
+        loadLayout.addWidget(loadTitle, 0, 0, 1, 2)
+        loadLayout.addWidget(QtGui.QLabel('STORM pixel [nm]'), 1, 0)
+        self.STORMPxEdit = QtGui.QLineEdit()
+        loadLayout.addWidget(self.STORMPxEdit, 1, 1)
+        loadLayout.addWidget(QtGui.QLabel('STORM magnification'), 2, 0)
+        self.magnificationEdit = QtGui.QLineEdit()
+        loadLayout.addWidget(self.magnificationEdit, 2, 1)
+        self.loadSTORMButton = QtGui.QPushButton('Load STORM Image')
+        loadLayout.addWidget(self.loadSTORMButton, 3, 0, 1, 2)
+        loadLayout.addWidget(QtGui.QLabel('STED pixel [nm]'), 4, 0)
+        self.STEDPxEdit = QtGui.QLineEdit()
+        loadLayout.addWidget(self.STEDPxEdit, 4, 1)
+        self.loadSTEDButton = QtGui.QPushButton('Load STED Image')
+        loadLayout.addWidget(self.loadSTEDButton, 5, 0, 1, 2)
+        loadLayout.setColumnMinimumWidth(1, 40)
+        loadFrame.setFixedHeight(180)
+
+        # Ring finding method settings frame
+        self.intThrLabel = QtGui.QLabel('#sigmas threshold from mean')
+        self.intThresEdit = QtGui.QLineEdit()
+        self.sigmaEdit = QtGui.QLineEdit()
+        self.lineLengthEdit = QtGui.QLineEdit()
+        self.roiSizeEdit = QtGui.QLineEdit()
+        self.corrThresEdit = QtGui.QLineEdit('0')
+        self.corrSlider = QtGui.QSlider(QtCore.Qt.Horizontal, self)
+        self.corrSlider.setMinimum(0)
+        self.corrSlider.setMaximum(250)   # Divide by 1000 to get corr value
+        self.corrSlider.setValue(1000*float(self.corrThresEdit.text()))
+        self.corrSlider.valueChanged[int].connect(self.sliderChange)
+        self.showCorrMapCheck = QtGui.QCheckBox('Show correlation map', self)
+        self.thetaStepEdit = QtGui.QLineEdit()
+        self.deltaThEdit = QtGui.QLineEdit()
+        self.sinPowerEdit = QtGui.QLineEdit()
+        self.corrButton = QtGui.QPushButton('Run analysis')
+        self.corrButton.setCheckable(True)
+        settingsFrame = QtGui.QFrame(self)
+        settingsFrame.setFrameStyle(QtGui.QFrame.Panel)
+        settingsLayout = QtGui.QGridLayout()
+        settingsFrame.setLayout(settingsLayout)
+        settingsTitle = QtGui.QLabel('<strong>Ring finding settings</strong>')
+        settingsTitle.setTextFormat(QtCore.Qt.RichText)
+        settingsLayout.addWidget(settingsTitle, 0, 0, 1, 2)
+        wvlenLabel = QtGui.QLabel('Rings periodicity [nm]')
+        self.wvlenEdit = QtGui.QLineEdit()
+        settingsLayout.addWidget(wvlenLabel, 1, 0)
+        settingsLayout.addWidget(self.wvlenEdit, 1, 1)
+        corrThresLabel = QtGui.QLabel('Discrimination threshold')
+        settingsLayout.addWidget(corrThresLabel, 2, 0)
+        settingsLayout.addWidget(self.corrThresEdit, 2, 1)
+        settingsLayout.addWidget(self.corrSlider, 3, 0, 1, 2)
+        settingsLayout.addWidget(self.showCorrMapCheck, 4, 0, 1, 2)
+        settingsLayout.addWidget(self.corrButton, 5, 0, 1, 2)
+        loadLayout.setColumnMinimumWidth(1, 40)
+        settingsFrame.setFixedHeight(180)
+
+        # Load settings configuration and then connect the update
+        try:
+            tools.loadConfig(self)
+        except:
+            tools.saveDefaultConfig()
+            tools.loadConfig(self)
+        self.STORMPxEdit.editingFinished.connect(self.updateConfig)
+        self.magnificationEdit.editingFinished.connect(self.updateConfig)
+        self.STEDPxEdit.editingFinished.connect(self.updateConfig)
+        self.roiSizeEdit.editingFinished.connect(self.updateConfig)
+        self.sigmaEdit.editingFinished.connect(self.updateConfig)
+        self.intThresEdit.editingFinished.connect(self.updateConfig)
+        self.lineLengthEdit.editingFinished.connect(self.updateConfig)
+        self.wvlenEdit.editingFinished.connect(self.updateConfig)
+        self.sinPowerEdit.editingFinished.connect(self.updateConfig)
+        self.thetaStepEdit.editingFinished.connect(self.updateConfig)
+        self.deltaThEdit.editingFinished.connect(self.updateConfig)
+        self.corrThresEdit.editingFinished.connect(self.updateConfig)
+
         self.buttonWidget = QtGui.QWidget()
+        buttonsLayout = QtGui.QGridLayout()
+        self.buttonWidget.setLayout(buttonsLayout)
+        buttonsLayout.addWidget(loadFrame, 0, 0)
+        buttonsLayout.addWidget(settingsFrame, 1, 0)
 
         # layout of the three widgets
+        self.mainLayout.addWidget(self.buttonWidget, 1, 0)
+        corrLabel = QtGui.QLabel('Correlation')
+        corrLabel.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self.mainLayout.addWidget(corrLabel, 0, 1)
+        self.mainLayout.addWidget(self.corrImgWidget, 1, 1, 2, 1)
+        ringLabel = QtGui.QLabel('Rings')
+        ringLabel.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignVCenter)
+        self.mainLayout.addWidget(ringLabel, 0, 2)
+        self.mainLayout.addWidget(self.ringImgWidget, 1, 2, 2, 1)
+        self.mainLayout.setColumnMinimumWidth(1, 600)
+        self.mainLayout.setColumnMinimumWidth(2, 600)
+        self.buttonWidget.setFixedWidth(200)
 
-        self.mainLayout.addWidget(self.inputWidget, 0, 0, 2, 1)
-        self.mainLayout.addWidget(self.outputWidget, 0, 1, 2, 1)
-        self.mainLayout.addWidget(self.buttonWidget, 0, 2, 1, 1)
+        self.loadSTORMButton.clicked.connect(self.loadSTORM)
+        self.loadSTEDButton.clicked.connect(self.loadSTED)
+        self.sigmaEdit.textChanged.connect(self.updateImage)
+        self.corrButton.clicked.connect(self.ringFinder)
 
-        self.inputImg = pg.ImageItem()
-        self.inputVb = self.inputWidget.addViewBox(col=0, row=0)
-        self.inputVb.setAspectLocked(True)
-        self.inputVb.addItem(self.inputImg)
+        # Load sample STED image
+        folder = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder')
+        if os.path.exists(folder):
+            self.loadSTED(os.path.join(folder, 'spectrinSTED.tif'))
+        else:
+            self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
-        inputImgHist = pg.HistogramLUTItem()
-        inputImgHist.gradient.loadPreset('thermal')
-        inputImgHist.setImageItem(self.inputImg)
-        self.inputWidget.addItem(inputImgHist)
+    def updateConfig(self):
+        tools.saveConfig(self)
 
-        imInput = Image.open(r'C:\Users\luciano.masullo\Documents\GitHub\LabNanofisica\labnanofisica/ringfinder/test data/STED/16.06.30 Espectrina Georgina/Atto647N/tiff/STED2.tif')
-        self.inputData = np.array(imInput)
-        self.inputImg.setImage(self.inputData)
-        self.inputDataSize = np.size(self.inputData[0])
+    def sliderChange(self, value):
+        self.corrThresEdit.setText(str(np.round(0.001*value, 2)))
+        self.corrEditChange(str(value/1000))
 
-        self.outputImg = pg.ImageItem()
-        self.outputVb = self.outputWidget.addViewBox(col=0, row=0)
-        self.outputVb.setAspectLocked(True)
-        self.outputVb.addItem(self.outputImg)
+    def corrEditChange(self, text):
+        self.corrSlider.setValue(1000*float(text))
+        if self.analyzed:
+            self.corrThres = float(text)
+            self.ringsBig = np.nan_to_num(self.localCorrBig) > self.corrThres
+            self.ringsBig = self.ringsBig.astype(float)
+            self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
 
-        outputImgHist = pg.HistogramLUTItem()
-        outputImgHist.gradient.loadPreset('thermal')
-        outputImgHist.setImageItem(self.outputImg)
-        self.outputWidget.addItem(outputImgHist)
+    def loadSTED(self, filename=None):
+        load = self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
+                              filename=filename)
+        if load:
+            self.sigmaEdit.setText('100')
+            self.intThresEdit.setText('0.5')
 
-#        imOutput = Image.open('spectrin1.tif')
-#        self.outputData = np.array(imOutput)
-#        self.outputImg.setImage(np.rot90(self.outputData))
+    def loadSTORM(self, filename=None):
+        # The STORM image has black borders because it's not possible to
+        # localize molecules near the edge of the widefield image.
+        # Therefore we need to crop those 3px borders before running the
+        # analysis.
+        mag = np.float(self.magnificationEdit.text())
+        load = self.loadImage(np.float(self.STORMPxEdit.text()), 'STORM',
+                              crop=int(3*mag), filename=filename)
+        if load:
+            self.corrImgHist.setLevels(0, 3)
+            self.ringImgHist.setLevels(0, 3)
+            self.sigmaEdit.setText('100')
+            self.intThresEdit.setText('0.5')
 
-        self.outputResult = pg.ImageItem()
-        self.outputVb.addItem(self.outputResult)
+    def loadImage(self, pxSize, tt, crop=0, filename=None):
 
-        self.buttonsLayout = QtGui.QGridLayout()
-        self.buttonWidget.setLayout(self.buttonsLayout)
+        try:
 
-        self.setGrid(self.inputVb, n=10)
+            if not(isinstance(filename, str)):
+                self.filename = utils.getFilename('Load ' + tt + ' image',
+                                                  [('Tiff file', '.tif')],
+                                                  os.getcwd())
+            else:
+                self.filename = filename
 
-        self.FFT2Button = QtGui.QPushButton('FFT 2D')
-        self.corrButton = QtGui.QPushButton('Correlation')
-        self.deltaAngleEdit = QtGui.QLineEdit('30')
-        self.thetaStepEdit = QtGui.QLineEdit('3')
-        self.pointsButton = QtGui.QPushButton('Points')
-        self.loadimageButton = QtGui.QPushButton('Load Image')
-        self.fftThrEdit = QtGui.QLineEdit('0.6')
-        self.pointsThrEdit = QtGui.QLineEdit('0.6')
-#        self.subimgNumEdit = QtGui.QLineEdit('10')
-        self.sigmaEdit = QtGui.QLineEdit('60')
-        self.lineLengthEdit = QtGui.QLineEdit('0.2')
-        self.pxSizeEdit = QtGui.QLineEdit('20')
-        self.corr2thrEdit = QtGui.QLineEdit('0.1')
-        self.sinPowerEdit = QtGui.QLineEdit('2')
-        self.wvlenEdit = QtGui.QLineEdit('180')
+            if self.filename is not None:
 
-        self.corr2thrLabel = QtGui.QLabel('Correlation threshold')
-        self.thetaStepLabel = QtGui.QLabel('Angular step (°)')
-        self.deltaAngleLabel = QtGui.QLabel('Delta Angle (°)')
-        self.sinPowerLabel = QtGui.QLabel('Sinusoidal pattern power')
-        self.sigmaLabel = QtGui.QLabel('Sigma of gaussian filter')
-        self.pxSizeLabel = QtGui.QLabel('Pixel Size (nm)')
-        self.wvlenLabel = QtGui.QLabel('wvlen of corr pattern (nm)')
-        self.lineLengthLabel = QtGui.QLabel('Direction lines length')
-        self.getDirParam = QtGui.QLabel('Get direction parameters')
-#        self.buttonsLayout.addWidget(self.FFT2Button, 0, 0, 1, 2)
-#        self.buttonsLayout.addWidget(self.pointsButton, 1, 0, 1, 2)
-        self.buttonsLayout.addWidget(self.corrButton, 0, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.corr2thrLabel, 1, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.corr2thrEdit, 1, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.thetaStepLabel, 2, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.thetaStepEdit, 2, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.deltaAngleLabel, 3, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.deltaAngleEdit, 3, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.sinPowerLabel, 4, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.sinPowerEdit, 4, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.wvlenLabel, 5, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.wvlenEdit, 5, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.getDirParam, 6, 0, 1, 2)
-        self.buttonsLayout.addWidget(self.sigmaLabel, 7, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.sigmaEdit, 7, 1, 1, 1)
-        self.buttonsLayout.addWidget(self.lineLengthLabel, 8, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.lineLengthEdit, 8, 1, 1, 1)
+                self.corrButton.setChecked(False)
+                self.analyzed = False
 
-        self.buttonsLayout.addWidget(self.loadimageButton, 9, 0, 1, 1)
-#        self.buttonsLayout.addWidget(self.subimgNumEdit, 7, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pxSizeLabel, 10, 0, 1, 1)
-        self.buttonsLayout.addWidget(self.pxSizeEdit, 10, 1, 1, 1)
+                self.initialdir = os.path.split(self.filename)[0]
+                self.crop = np.int(crop)
+                self.pxSize = pxSize
+                self.corrVb.clear()
+                self.corrResult.clear()
+                self.ringVb.clear()
+                self.ringResult.clear()
 
-        self.loadimageButton.clicked.connect(self.loadImage)
+                im = Image.open(self.filename)
+                self.inputData = np.array(im).astype(np.float64)
+                self.initShape = self.inputData.shape
+                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+                self.inputData = self.inputData[self.crop:bound[0],
+                                                self.crop:bound[1]]
+                self.shape = self.inputData.shape
+                self.updateImage()
+                self.corrVb.addItem(self.corrImgItem)
+                self.ringVb.addItem(self.ringImgItem)
+                showIm = np.fliplr(np.transpose(self.inputData))
+                self.corrImgItem.setImage(showIm)
+                self.ringImgItem.setImage(showIm)
 
-        def rFpoints():
-            return self.RingFinder(self.points)
+                # We need 1um n-sized subimages
+                self.subimgPxSize = 1000/self.pxSize
+                self.n = (np.array(self.shape)/self.subimgPxSize).astype(int)
+                self.grid = tools.Grid(self.corrVb, self.shape, self.n)
 
-        self.pointsButton.clicked.connect(rFpoints)
+                self.corrVb.setLimits(xMin=-0.05*self.shape[0],
+                                      xMax=1.05*self.shape[0], minXRange=4,
+                                      yMin=-0.05*self.shape[1],
+                                      yMax=1.05*self.shape[1], minYRange=4)
+                self.ringVb.setLimits(xMin=-0.05*self.shape[0],
+                                      xMax=1.05*self.shape[0], minXRange=4,
+                                      yMin=-0.05*self.shape[1],
+                                      yMax=1.05*self.shape[1], minYRange=4)
 
-        def rFfft2():
-            return self.RingFinder(self.FFT2)
+                self.dataMean = np.mean(self.inputData)
+                self.dataStd = np.std(self.inputData)
 
-        self.FFT2Button.clicked.connect(rFfft2)
+                self.corrVb.addItem(self.corrResult)
+                self.ringVb.addItem(self.ringResult)
 
-        def rFcorr():
-            return self.RingFinder(self.corr2)
+                return True
 
-        self.corrButton.clicked.connect(rFcorr)
+            else:
+                return False
 
-    def loadImage(self):
+        except OSError:
+            self.fileStatus.setText('No file selected!')
 
-        self.inputVb.clear()
-        pxSize = np.float(self.pxSizeEdit.text())
-        subimgPxSize = 1000/pxSize
-        self.filename = getFilename("Load image", [('Tiff file', '.tif')])
-        self.loadedImage = Image.open(self.filename)
-        self.inputData = np.array(self.loadedImage)
-        self.inputVb.addItem(self.inputImg)
-        self.inputImg.setImage(self.inputData)
-        self.inputDataSize = np.size(self.inputData[0])
-        n = np.int(np.shape(self.inputData)[0]/subimgPxSize)
-        self.setGrid(self.inputVb, n)
+    def updateImage(self):
+        self.gaussSigma = np.float(self.sigmaEdit.text())/self.pxSize
+        self.inputDataS = ndi.gaussian_filter(self.inputData,
+                                              self.gaussSigma)
+        self.meanS = np.mean(self.inputDataS)
+        self.stdS = np.std(self.inputDataS)
 
-    def setGrid(self, image, n):
+        self.showImS = np.fliplr(np.transpose(self.inputDataS))
 
-        pen = QtGui.QPen(QtCore.Qt.yellow, 1, QtCore.Qt.SolidLine)
+        # binarization of image
+        thr = np.float(self.intThresEdit.text())
+        self.mask = self.inputDataS < self.meanS + thr*self.stdS
+        self.showMask = np.fliplr(np.transpose(self.mask))
 
-        xlines = []
-        ylines = []
-
-        for i in np.arange(0, n-1):
-            xlines.append(pg.InfiniteLine(pen=pen, angle=0))
-            ylines.append(pg.InfiniteLine(pen=pen))
-
-        for i in np.arange(0, n-1):
-            xlines[i].setPos((self.inputDataSize/n)*(i+1))
-            ylines[i].setPos((self.inputDataSize/n)*(i+1))
-            image.addItem(xlines[i])
-            image.addItem(ylines[i])
-
-    def RingFinder(self, algorithm):
+    def ringFinder(self, show=True, batch=False):
         """RingFinder handles the input data, and then evaluates every subimg
         using the given algorithm which decides if there are rings or not.
         Subsequently gives the output data and plots it"""
-        
-        # initialize variables
-        self.localCorr = []
-        a = 0
-        self.outputImg.clear()
-        self.outputResult.clear()
-        
-        # m is such that the image has m x m subimages
-        m = self.subimgNum
 
-        # shape the data into the subimg that we need for the analysis
-        self.blocksInput = blockshaped(self.inputData, self.inputDataSize/m,
-                                       self.inputDataSize/m)
-                                       
-        # initialize the matrix with the values of 1 and 0 (rings or not)                              
-        M = np.zeros(m**2)
-#        intTot = np.sum(self.inputData)
+        if self.corrButton.isChecked() or batch:
 
-        for i in np.arange(0, np.shape(self.blocksInput)[0]):
-            
-            # for every subimg, evaluate it, with the given algorithm
-            if algorithm(self.blocksInput[i, :, :]):
+            self.corrResult.clear()
+            self.ringResult.clear()
 
-#            if np.sum(self.blocksInput[i, :, :]) > (intTot/m**2) and algorithm(self.blocksInput[i, :, :]):
-#            if np.sum(self.blocksInput[i, :, :]) > intTot/m**2:
-                M[i] = 1
-                a = a+1
-            else:
-                M[i] = 0
+            # shape the data into the subimg that we need for the analysis
+            nblocks = np.array(self.inputData.shape)/self.n
+            blocksInput = tools.blockshaped(self.inputData, *nblocks)
+            blocksInputS = tools.blockshaped(self.inputDataS, *nblocks)
+            blocksMask = tools.blockshaped(self.mask, *nblocks)
+
+            # for each subimg, we apply the correlation method for ring finding
+            intThr = np.float(self.intThresEdit.text())
+            minLen = np.float(self.lineLengthEdit.text())/self.pxSize
+            thetaStep = np.float(self.thetaStepEdit.text())
+            deltaTh = np.float(self.deltaThEdit.text())
+            wvlen = np.float(self.wvlenEdit.text())/self.pxSize
+            sinPow = np.float(self.sinPowerEdit.text())
+            cArgs = minLen, thetaStep, deltaTh, wvlen, sinPow
+
+            # Single-core code
+            self.localCorr = np.zeros(len(blocksInput))
+            for i in np.arange(len(blocksInput)):
+                block = blocksInput[i]
+                blockS = blocksInputS[i]
+                mask = blocksMask[i]
+                # Block may be excluded from the analysis for two reasons.
+                # Firstly, because the intensity for all its pixels may be
+                # too low. Secondly, because the part of the block that
+                # belongs toa neuron may be below an arbitrary 30% of the
+                # block. We apply intensity threshold to smoothed data so we
+                # don't catch tiny bright spots outside neurons
+                neuronFrac = 1 - np.sum(mask)/np.size(mask)
+                thres = self.meanS + intThr*self.stdS
+                if np.any(blockS > thres) and neuronFrac > 0.25:
+                    output = tools.corrMethod(block, mask, *cArgs)
+                    angle, corrTheta, corrMax, theta, phase = output
+                    # Store results
+                    self.localCorr[i] = corrMax
+                else:
+                    self.localCorr[i] = np.nan
+
+            self.localCorr = self.localCorr.reshape(*self.n)
+            self.updateGUI(self.localCorr)
+
+        else:
+            self.corrResult.clear()
+            self.ringResult.clear()
+
+    def updateGUI(self, localCorr):
+
+        self.analyzed = True
+        self.localCorr = localCorr
 
         # code for visualization of the output
-        M1 = M.reshape(m, m)
-        self.outputData = np.kron(M1, np.ones((self.inputDataSize/m,
-                                               self.inputDataSize/m)))
-        self.outputImg.setImage(self.inputData)
-        self.outputResult.setImage(self.outputData)
-        self.outputResult.setZValue(10)  # make sure this image is on top
-        self.outputResult.setOpacity(0.5)
-        
-        print(self.localCorr)
-        print(np.size(self.localCorr))
-#        self.setGrid(self.outputVb,n=10)
-#        
-#        # plot histogram of the correlation values
-#        plt.figure(0)
-#        plt.subplot()
-#        plt.hist(self.localCorr)
-#        plt.title("Correlations Histogram")
-#        plt.xlabel("Value")
-#        plt.ylabel("Frequency")
-#        
-        plt.figure()
-        data = np.array(self.localCorr).reshape(m,m)
-        data = np.rot90(data)
-        data = np.flipud(data)
-        heatmap = plt.pcolor(data)
+        mag = np.array(self.inputData.shape)/self.n
+        self.localCorrBig = np.repeat(self.localCorr, mag[0], 0)
+        self.localCorrBig = np.repeat(self.localCorrBig, mag[1], 1)
+        showIm = 100*np.fliplr(np.transpose(self.localCorrBig))
+        self.corrResult.setImage(np.nan_to_num(showIm))
+        self.corrResult.setZValue(10)    # make sure this image is on top
+        self.corrResult.setOpacity(0.5)
 
-        for y in range(data.shape[0]):
-            for x in range(data.shape[1]):
-                plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
-                         horizontalalignment='center',
-                         verticalalignment='center',
-                         )
-                         
-        plt.colorbar(heatmap)
+        self.corrThres = float(self.corrThresEdit.text())
+        self.ringsBig = np.nan_to_num(self.localCorrBig) > self.corrThres
+        self.ringsBig = self.ringsBig.astype(float)
+        self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
+        self.ringResult.setZValue(10)    # make sure this image is on top
+        self.ringResult.setOpacity(0.5)
 
-        plt.show()
+        if self.showCorrMapCheck.isChecked():
+            plt.figure(figsize=(10, 8))
+            data = self.localCorr.reshape(*self.n)
+            data = np.flipud(data)
+            maskedData = np.ma.array(data, mask=np.isnan(data))
+            heatmap = plt.pcolor(maskedData, cmap='inferno')
+            for y in range(data.shape[0]):
+                for x in range(data.shape[1]):
+                    plt.text(x + 0.5, y + 0.5, '%.4f' % data[y, x],
+                             horizontalalignment='center',
+                             verticalalignment='center',)
+            plt.colorbar(heatmap)
+            plt.show()
 
-    def FFT2(self, data):
-        """FFT 2D analysis of actin rings. Looks for maxima at 180 nm in the
-        frequency spectrum"""
-        
-        # calculate new fft2
-        fft2output = np.real(np.fft.fftshift(np.fft.fft2(data)))
+    def batch(self, function, tech):
+        try:
+            filenames = utils.getFilenames('Load ' + tech + ' images',
+                                           [('Tiff file', '.tif')],
+                                           self.initialdir)
+            nfiles = len(filenames)
+            function(filenames[0])
+            corrArray = np.zeros((nfiles, self.n[0], self.n[1]))
 
-        # take abs value and log10 for better visualization
-        fft2output = np.abs(np.log10(fft2output))
+            # Expand correlation array so it matches data shape
+            corrExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+                               dtype=np.single)
+            corrExp[:] = np.nan
+            ringsExp = np.empty((nfiles, self.initShape[0], self.initShape[1]),
+                                dtype=np.single)
+            ringsExp[:] = np.nan
 
-        self.fftThr = 0.4
+            path = os.path.split(filenames[0])[0]
+            folder = os.path.split(path)[1]
+            self.folderStatus.setText('Processing folder ' + path)
+            print('Processing folder', path)
+            t0 = time.time()
+            for i in np.arange(nfiles):
+                print(os.path.split(filenames[i])[1])
+                self.fileStatus.setText(os.path.split(filenames[i])[1])
+                function(filenames[i])
+                self.ringFinder(False, batch=True)
+                corrArray[i] = self.localCorr
 
-        # calculate local intensity maxima
-        coord = peak_local_max(fft2output, min_distance=2,
-                               threshold_rel=self.fftThr)
+                bound = (np.array(self.initShape) - self.crop).astype(np.int)
+                corrExp[i, self.crop:bound[0],
+                        self.crop:bound[1]] = self.localCorrBig
 
-        # take first 3 max
-        coord = firstNmax(coord, fft2output, N=3)
+                # Save correlation values array
+                corrName = utils.insertSuffix(filenames[i], '_correlation')
+                tiff.imsave(corrName, corrExp[i], software='Gollum',
+                            imagej=True,
+                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+                            metadata={'spacing': 1, 'unit': 'um'})
 
-        # size of the subimqge of interest
-        A = np.shape(data)[0]
+            # Saving ring images
+            ringsExp[corrExp < self.corrThres] = 0
+            ringsExp[corrExp >= self.corrThres] = 1
+            for i in np.arange(nfiles):
+                # Save correlation values array
+                ringName = utils.insertSuffix(filenames[i], '_rings')
+                tiff.imsave(ringName, ringsExp[i], software='Gollum',
+                            imagej=True,
+                            resolution=(1000/self.pxSize, 1000/self.pxSize),
+                            metadata={'spacing': 1, 'unit': 'um'})
 
-        # max and min radius in pixels, 9 -> 220 nm, 12 -> 167 nm
-        rmin = 9
-        rmax = 12
+            # plot histogram of the correlation values
+            hrange = (np.min(np.nan_to_num(corrArray)),
+                      np.max(np.nan_to_num(corrArray)))
+            y, x, _ = plt.hist(corrArray.flatten(), bins=60, range=hrange)
+            x = (x[1:] + x[:-1])/2
 
-        # auxarrays: ringBool, D
+            # Save data array as txt
+            corrArrayFlat = corrArray.flatten()
+            validCorr = corrArrayFlat[~np.isnan(corrArrayFlat)]
+            validArr = np.repeat(np.arange(nfiles), np.prod(self.n))
+            validArr = validArr[~np.isnan(corrArrayFlat)]
+            valuesTxt = os.path.join(path, folder + 'corr_values.txt')
+            np.savetxt(valuesTxt, np.stack((validCorr, validArr), 1),
+                       fmt='%f\t%i')
 
-        # ringBool is checked to define wether there are rings or not
-        ringBool = []
+            # Plotting
+            plt.figure(0)
+            ringData = validCorr[validCorr > self.corrThres]
+            n = corrArray.size - np.count_nonzero(np.isnan(corrArray))
+            nring = np.sum(validCorr > self.corrThres)
+            ringFrac = nring / n
+            ringStd = math.sqrt(ringFrac*(1 - ringFrac)/n)
+            plt.bar(x, y, align='center', width=(x[1] - x[0]))
+            plt.plot((self.corrThres, self.corrThres), (0, np.max(y)), 'r--',
+                     linewidth=2)
+            text = ('ringFrac={0:.3f} +- {1:.3f} \n'
+                    'correlation threshold={2:.2f} \n'
+                    'mean correlation={3:.4f} +- {4:.4f} \n'
+                    'mean ring correlation={5:.4f} +- {6:.4f}')
+            text = text.format(ringFrac, ringStd, self.corrThres,
+                               np.mean(validCorr), np.std(validCorr)/n,
+                               np.mean(ringData), np.std(ringData)/nring)
+            plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3], text,
+                     horizontalalignment='center', verticalalignment='center',
+                     bbox=dict(facecolor='white'))
+            plt.title("Correlations Histogram")
+            plt.xlabel("Value")
+            plt.ylabel("Frequency")
+            plt.savefig(os.path.join(path, folder + 'corr_hist'))
+            plt.close()
 
-        # D saves the distances of local maxima from the centre of the fft2
-        D = []
+            folder = os.path.split(path)[1]
+            text = 'Folder ' + folder + ' done in {0:.0f} seconds'
+            print(text.format(time.time() - t0))
+            self.folderStatus.setText(text.format(time.time() - t0))
+            self.fileStatus.setText('                 ')
 
-        # loop for calculating all the distances d, elements of array D
+        except IndexError:
+            self.fileStatus.setText('No file selected!')
 
-        for i in np.arange(0, np.shape(coord)[0]):
-            d = dist([A/2, A/2], coord[i])
-            D.append(dist([A/2, A/2], coord[i]))
-            if A*(rmin/100) < d < A*(rmax/100):
-                ringBool.append(1)
+    def batchSTORM(self):
+        self.batch(self.loadSTORM, 'STORM')
 
-        if np.sum(ringBool) == np.shape(coord)[0]-1 and np.sum(ringBool) > 0:
-            return 1
-        else:
-            return 0
-
-    def points(self, data):
-        """Finds local maxima in the image (points) and then if there are
-        three or more in a row considers that to be actin rings"""        
-        
-        self.pointsThr = .3
-        points = peak_local_max(data, min_distance=6,
-                                threshold_rel=self.pointsThr)
-        points = firstNmax(points, data, N=7)
-
-        if points == []:
-            return 0
-
-        dmin = 8
-        dmax = 11
-
-        D = []
-
-        # look up every point
-        for i in np.arange(0, np.shape(points)[0]-1):
-            # calculate the distance of every point to the others
-            for j in np.arange(i+1, np.shape(points)[0]):
-                d1 = dist(points[i], points[j])
-                # if there are two points at the right distance then
-                if dmin < d1 < dmax:
-                    for k in np.arange(0, np.shape(points)[0]-1):
-                        # check the distance between the last point
-                        # and the other points in the list
-                        if k != i & k != j:
-                            d2 = dist(points[j], points[k])
-
-                        else:
-                            d2 = 0
-
-                        # calculate the angle between vector i-j
-                        # and j-k with i, j, k points
-                        v1 = points[i]-points[j]
-                        v2 = points[j]-points[k]
-                        t = cosTheta(v1, v2)
-
-                        # if point k is at right distance from point j and
-                        # the angle is flat enough
-                        if dmin < d2 < dmax and np.abs(t) > 0.9:
-                            # save the three points and plot the connections
-                            D.append([points[i], points[j], points[k]])
-
-                        else:
-                            pass
-
-        if len(D) > 0:
-            return 1
-        else:
-            return 0
-
-    def corr2(self, data):
-        """Correlates the image with a given sinusoidal pattern"""        
-        
-
-        # correlation thr set by the user
-        corr2thr = np.float(self.corr2thrEdit.text())
-
-        # mean angle calculated
-        meanAngle = self.getDirection(data)
-        print('meanAngle is {}'.format(np.around(meanAngle, 1)))
-
-        if meanAngle == 2:
-            dataRot = np.rot90(data)
-            meanAngle = self.getDirection(dataRot)-90
-
-        if meanAngle == 666:
-            self.localCorr.append(0)
-            return 0
-        else:
-            subImgSize = np.shape(data)[0]
-
-            # angular step size set by the user
-            n = np.float(self.thetaStepEdit.text())
-
-            # get the max allowed angle from the user
-            maxAngle = np.float(self.deltaAngleEdit.text())
-
-            # set the angle range to look for a correlation, 179 is added
-            # because of later corrAngle's expansion
-            deltaAngle = np.arange(meanAngle-maxAngle,
-                                   meanAngle+maxAngle, n, dtype=int)
-                                   
-            print('deltaAngle is {}'.format(deltaAngle))
-
-            thetaSteps = np.arange(0, np.size((deltaAngle-179)/n), 1)
-            # phase steps are set to 20, TO DO: explore this parameter
-            phaseSteps = np.arange(0, 21, 1)
-
-            corrPhase = np.zeros(np.size(phaseSteps))
-            corrAngle = np.zeros(np.size(thetaSteps))
-
-            wvlen_nm = np.float(self.wvlenEdit.text())  # wvlen in nm
-            pxSize = np.float(self.pxSizeEdit.text())  # pixel size in nm
-            wvlen = wvlen_nm/pxSize  # wvlen in px
-            sinPower = np.float(self.sinPowerEdit.text())
-
-            # for now we correlate with the full sin2D pattern
-
-            for i in thetaSteps:
-                for p in phaseSteps:
-                    # creates simulated axon
-                    axonTheta = simAxon(subImgSize, wvlen, deltaAngle[i],
-                                        p*.025, a=0, b=sinPower).simAxon
-                    # calculates correlation with data
-                    c = corr2(data, axonTheta)
-                    # saves correlation for the given phase p
-                    corrPhase[p] = c
-                # saves the correlation for the best p, and given angle i
-                corrAngle[i-1] = np.max(corrPhase)
-            
-            self.localCorr.append(np.max(corrAngle))            
-            
-            if np.max(corrAngle) > corr2thr:
-                return 1
-            else:
-                return 0
-
-    def getDirection(self, data):
-        """Returns the direction (angle) of the neurite in the image"""        
-        
-        # dataSize
-        dataSize = np.shape(data)[0]
-
-        # gaussian filter to get low resolution image
-        sigma = np.float(self.sigmaEdit.text())
-        pxSize = np.float(self.pxSizeEdit.text())
-        sigma_px = sigma/pxSize
-        img = ndi.gaussian_filter(data, sigma_px)
-
-        # TO DO: good cond on intensity
-        if np.sum(img) < 10:
-            return 666
-        else:
-            pass
-
-        # binarization of image
-        thresh = threshold_otsu(img)
-        binary = img > thresh
-
-        # find edges
-        edges = filters.sobel(binary)
-
-        # min line length is set by the user
-        linLen = np.float(self.lineLengthEdit.text())
-
-        # get directions
-        lines = probabilistic_hough_line(edges, threshold=10,
-                                         line_length=dataSize*linLen,
-                                         line_gap=3)
-
-        # allocate angleArr which will have the angles of the lines
-        angleArr = []
-        
-        # if cannot find any directions, return 666, code for this case
-        if lines == []:
-            return 666
-
-        else:
-            for line in lines:
-                p0, p1 = line
-
-                # get the m coefficient of the lines and the angle
-                if p1[1] == p0[1]:
-                    angle = 90
-                else:
-                    m = (p1[0]-p0[0])/(p1[1]-p0[1])
-                    angle = (180/np.pi)*np.arctan(m)
-
-                angleArr.append(angle)
-
-            # calculate mean angle and its standard deviation
-            print('angleArr is {}'.format(np.around(angleArr, 1)))
-            meanAngle = np.mean(angleArr)
-            stdAngle = np.std(angleArr)
-
-            # if the std is too high it's probably the case of flat angles,
-            # i.e., 181, -2, 0.3, -1, 179, getDirection returns 2, a code
-            # for this case.
-            # TO DO: find optimal threshold, 40 is arbitrary
-            if stdAngle > 40:
-                return 2
-            else:
-                return meanAngle
+    def batchSTED(self):
+        self.batch(self.loadSTED, 'STED')
 
 if __name__ == '__main__':
-
     app = QtGui.QApplication([])
-
-    win = RingAnalizer()
+    win = Gollum()
     win.show()
     app.exec_()

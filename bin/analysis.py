@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed May 20 15:14:09 2015
-
-@author: federico
+@author: Federico Barabas
 """
 
 from pyqtgraph.Qt import QtGui
@@ -33,8 +32,6 @@ class AnalysisWidget(QtGui.QFrame):
         grid.setColumnMinimumWidth(0, 600)
 
 #    def openStack(self):
-
-
 
 if __name__ == '__main__':
 

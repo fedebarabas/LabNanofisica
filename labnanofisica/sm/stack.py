@@ -8,9 +8,8 @@ Created on Sun Dec 22 16:44:59 2013
 import numpy as np
 import h5py as hdf
 import multiprocessing as mp
-
 import matplotlib.pyplot as plt
-from scipy.ndimage.filters import uniform_filter
+from scipy.ndimage.filters import uniform_filter, median_filter
 
 from tkinter import Tk, filedialog
 
@@ -154,22 +153,6 @@ class Stack(object):
         self.file.close()
 
 
-def bkg_estimation(data_stack, window=100):
-    ''' Background estimation. It's a running (time) mean.
-    Hoogendoorn et al. in "The fidelity of stochastic single-molecule
-    super-resolution reconstructions critically depends upon robust background
-    estimation" recommend a median filter, but that takes too long, so we're
-    using an uniform filter.'''
-
-    intensity = np.mean(data_stack, (1, 2))
-    norm_data = data_stack / intensity[:, np.newaxis, np.newaxis]
-#    bkg_estimate = median_filter(norm_data, size=(window, 1, 1))
-    bkg_estimate = uniform_filter(norm_data, size=(window, 1, 1))
-    bkg_estimate *= intensity[:, np.newaxis, np.newaxis]
-
-    return bkg_estimate
-
-
 def localize_chunk(args, index=0):
 
     stack, init_frame, fit_model, max_args = args
@@ -211,6 +194,30 @@ def localize_chunk(args, index=0):
 #        print('{}% done'.format(progress), end="\r")
 
     return results[0:index]
+
+
+def bkg_estimation(data_stack, window=101):
+    ''' Background estimation. It's a running (time) mean.
+    Hoogendoorn et al. in "The fidelity of stochastic single-molecule
+    super-resolution reconstructions critically depends upon robust background
+    estimation" recommend a median filter, but that takes too long, so we're
+    using an uniform filter.'''
+
+    # Normalization
+    intensity = np.mean(data_stack, (1, 2))
+    data_stack = data_stack / intensity[:, np.newaxis, np.newaxis]
+
+    bkg_estimate = median_filter(data_stack, size=(window, 1, 1))
+#    bkg_estimate = uniform_filter(data_stack, size=(window, 1, 1))
+    bkg_estimate *= intensity[:, np.newaxis, np.newaxis]
+
+    return bkg_estimate
+
+
+def subtractChunk(data):
+    data = data - bkg_estimation(data)
+    data[data < 0] = 0
+    return data.astype(np.uint16)
 
 if __name__ == "__main__":
 

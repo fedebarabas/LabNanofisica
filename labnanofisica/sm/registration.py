@@ -6,15 +6,20 @@ Created on Tue Dec  8 20:51:54 2015
 """
 
 import os
+import time
+import multiprocessing as mp
 import numpy as np
 import matplotlib.pyplot as plt
 import math
 from scipy.ndimage import affine_transform
-#import tifffile as tiff
+import tifffile as tiff
 import h5py as hdf
+
+from PyQt4 import QtCore
 from tkinter import Tk, filedialog
 
-import labnanofisica.sm.maxima as maxima
+from labnanofisica.sm.maxima import Maxima
+import labnanofisica.utils as utils
 
 # epsilon for testing whether a number is close to zero
 _EPS = np.finfo(float).eps * 4.0
@@ -44,8 +49,10 @@ def load_hdf(filename):
 
 def split_images(arr):
 
-    images = np.zeros((2, 128, 266), dtype=np.uint16)
+    shape = arr.shape
+
     center = int(0.5*arr.shape[0])
+    images = np.zeros((2, center - 5, shape[1]), dtype=np.uint16)
     images[0] = arr[:center - 5, :]
     images[1] = arr[center + 5:, :]
 
@@ -56,7 +63,7 @@ def fit_and_plot(images, fig):
     points = []
     marks = ['rx', 'bs']
     for k in [0, 1]:
-        mm = maxima.Maxima(images[k])
+        mm = Maxima(images[k])
         mm.find(alpha=2.5)
         mm.getParameters()
         mm.fit()
@@ -80,7 +87,7 @@ def fit_and_plot(images, fig):
 
     # superposition of channels plot
     ax = fig.add_subplot(313)
-    ch_superposition(ax, points)
+    ch_superposition(ax, points, images[0].shape)
     plt.tight_layout()
 
     return points
@@ -94,11 +101,13 @@ def points_registration(images):
     fig.set_size_inches(7, 25, forward=True)
     points = fit_and_plot(images, fig)
 
-    if len(points[0]) != len(points[1]):
-        plt.show(block=False)
-        points = remove_bad_points(points)
+    plt.show(block=False)
+    points = remove_bad_points(points)
 
     plt.close()
+
+    if len(points[0]) != len(points[1]):
+        raise ValueError('The number of points in each channel is different')
 
     # Replotting images
     fig = plt.figure()
@@ -124,6 +133,8 @@ def points_registration(images):
 
 def plot_points(images, points, fig):
 
+    shape = images[0].shape
+
     marks = ['rx', 'bs']
     for k in [0, 1]:
         # Image plot
@@ -141,19 +152,28 @@ def plot_points(images, points, fig):
 
     # superposition of channels plot
     ax = fig.add_subplot(313)
-    ch_superposition(ax, points)
+    ch_superposition(ax, points, shape)
     plt.tight_layout()
     fig.set_size_inches(7, 25, forward=True)
 
 
-def ch_superposition(ax, points):
+def ch_superposition(ax, points, shape):
     # superposition of channels plot
     ax.plot(points[0][:, 1] - 0.5, points[0][:, 0] - 0.5, 'rx', mew=1, ms=5)
     ax.plot(points[1][:, 1] - 0.5, points[1][:, 0] - 0.5, 'bs', mew=1, ms=5,
             markerfacecolor='None')
+
+    for i in np.arange(len(points[0])):
+        ax.annotate(str(i), xy=(points[0][:, 1][i] - 0.6,
+                                points[0][:, 0][i] - 0.6), color='r')
+
+    for i in np.arange(len(points[1])):
+        ax.annotate(str(i), xy=(points[1][:, 1][i] - 5,
+                                points[1][:, 0][i] - 1.6), color='b')
+
     ax.set_aspect('equal')
-    ax.set_xlim(0, 266)
-    ax.set_ylim(128, 0)
+    ax.set_xlim(0, shape[1])
+    ax.set_ylim(shape[0], 0)
 
 
 def remove_bad_points(points):
@@ -385,7 +405,9 @@ def transformation_check(H, filename):
 
     images = load_images(filename)
 
-    images2 = np.zeros((2, 128, 266), dtype=np.uint16)
+    shape = images[0].shape
+
+    images2 = np.zeros((2, shape[0], shape[1]), dtype=np.uint16)
     images2[0] = images[0]
     images2[1] = h_affine_transform(images[1], H)
 
@@ -397,33 +419,169 @@ def transformation_check(H, filename):
     print('Maximum distance: ', np.max(dist))
 
 
-def get_affine_shapes(H):
+def find_largest_rectangle(a):
+    ''' Adapted from
+    http://stackoverflow.com/questions/2478447/
+    find-largest-rectangle-containing-only-zeros-in-an-n%C3%97n-binary-matrix
 
-    data = np.ones((128, 266))
+    Usage:
+    s = ''0 0 0 0 1 0
+    0 0 1 0 0 1
+    0 0 0 0 0 0
+    1 0 0 0 0 0
+    0 0 0 0 0 1
+    0 0 1 0 0 0''
+    a = np.fromstring(s, dtype=int, sep=' ').reshape(6, 6)
+    find_largest_rectangle(a)
+    '''
+
+    a = (1 - a).astype(np.int)
+
+    area_max = (0, [])
+
+    w = np.zeros(dtype=int, shape=a.shape)
+    h = np.zeros(dtype=int, shape=a.shape)
+    for r in range(a.shape[0]):
+        for c in range(a.shape[1]):
+            if a[r][c] == 1:
+                continue
+            if r == 0:
+                h[r][c] = 1
+            else:
+                h[r][c] = h[r - 1][c] + 1
+            if c == 0:
+                w[r][c] = 1
+            else:
+                w[r][c] = w[r][c - 1] + 1
+            minw = w[r][c]
+            for dh in range(h[r][c]):
+                minw = min(minw, w[r-dh][c])
+                area = (dh + 1)*minw
+                if area > area_max[0]:
+                    area_max = (area, [(r-dh, r), (c-minw + 1, c)])
+
+#    print('area', area_max[0])
+    xlim, ylim = area_max[1]
+
+    return xlim, ylim
+
+
+def get_affine_shapes(shape, H):
+
+    data = np.ones(shape)
     datac = h_affine_transform(data, H)
-    indices = np.where(datac == 1)
 
-    # This may only work with the present setup and two-color scheme
-    ylim = (indices[1].min(), indices[1].max() + 1)
-    xmin = indices[0].min()
-    while True:
-        if np.sum(datac[xmin, ylim[0]:ylim[1]] == 0) == 0:
-            break
-        else:
-            xmin += 1
+#    indices = np.where(datac == 1)
+#
+#    # This may only work with the present setup and two-color scheme
+#    ylim = (indices[1].min() + 1, indices[1].max() + 1)
+#    xmin = indices[0].min()
+#    while True:
+#        if np.sum(datac[xmin, ylim[0]:ylim[1]] == 0) == 0:
+#            # If all the elements are ones
+#            break
+#        else:
+#            xmin += 1
+#
+#    xmax = indices[0].max()
+#    while True:
+#        if np.sum(datac[xmax, ylim[0]:ylim[1]] == 0) == 0:
+#            break
+#        else:
+#            xmax -= 1
+#
+#    xlim = (xmin, xmax + 1)
+#    ylim = (indices[1].min(), indices[1].max() + 1)
 
-    xmax = indices[0].max()
-    while True:
-        if np.sum(datac[xmax, ylim[0]:ylim[1]] == 0) == 0:
-            break
-        else:
-            xmax -= 1
-
-    xlim = (xmin, xmax + 1)
-    ylim = (indices[1].min(), indices[1].max() + 1)
+    xlim, ylim = find_largest_rectangle(datac)
     cropShape = (xlim[1] - xlim[0], ylim[1] - ylim[0])
 
     return xlim, ylim, cropShape
+
+
+class HtransformStack(QtCore.QObject):
+    """ Transforms all frames of channel 1 using matrix H."""
+
+    finished = QtCore.pyqtSignal()
+
+    def run(self):
+        Hname = utils.getFilename("Select affine transformation matrix",
+                                  [('npy files', '.npy')])
+        H = np.load(Hname)
+
+        text = "Select files for affine transformation"
+        filenames = utils.getFilenames(text, types=[],
+                                       initialdir=os.path.split(Hname)[0])
+        for filename in filenames:
+            print(time.strftime("%Y-%m-%d %H:%M:%S") +
+                  ' Transforming stack ' + os.path.split(filename)[1])
+            ext = os.path.splitext(filename)[1]
+            filename2 = utils.insertSuffix(filename, '_corrected')
+
+            if ext == '.hdf5':
+                with hdf.File(filename, 'r') as f0, \
+                        hdf.File(filename2, 'w') as f1:
+
+                    dat0 = f0['data']
+                    xlim, ylim, cropShape = get_affine_shapes(dat0.shape, H)
+                    dat1 = self.mpStack(dat0, xlim, ylim, H)
+
+                    # Store
+                    f1.create_dataset(name='data', data=dat1)
+#                    f1['data'][:, -cropShape[0]:, :] = im1c
+
+            elif ext in ['.tiff', '.tif']:
+                with tiff.TiffFile(filename) as tt:
+
+                    dat0 = tt.asarray()
+                    sh0 = dat0.shape
+                    if len(dat0.shape) > 2:
+                        xlim, ylim, cropShape = get_affine_shapes(sh0, H)
+                        dat1 = self.mpStack(dat0, xlim, ylim, H)
+                        tiff.imsave(filename2, dat1)
+
+                    else:
+                        tiff.imsave(utils.insertSuffix(filename, '_ch0'),
+                                    dat0[:sh0[0], :])
+                        tiff.imsave(utils.insertSuffix(filename, '_ch1'),
+                                    h_affine_transform(dat0[-sh0[0]:, :], H))
+
+            print(time.strftime("%Y-%m-%d %H:%M:%S") + ' done')
+
+        self.finished.emit()
+
+    def mpStack(self, dat0, xlim, ylim, H):
+
+        # Multiprocessing
+        n = len(dat0)
+        cpus = mp.cpu_count()
+        step = n // cpus
+        chunks = [[i*step, (i + 1)*step] for i in np.arange(cpus)]
+        chunks[-1][1] = n
+        args = [[dat0[i:j, -dat0.shape[1]:, :], H] for i, j in chunks]
+        pool = mp.Pool(processes=cpus)
+        results = pool.map(transformChunk, args)
+        pool.close()
+        pool.join()
+        im1c = np.concatenate(results[:])
+
+        # Stack channels
+        im1c = im1c[:, xlim[0]:xlim[1], ylim[0]:ylim[1]]
+        im0 = dat0[:, :dat0.shape[0], :][:, xlim[0]:xlim[1], ylim[0]:ylim[1]]
+        return np.append(im0, im1c, 1)
+
+
+def transformChunk(args):
+
+    data, H = args
+
+    n = len(data)
+    out = np.zeros(data.shape, dtype=np.uint16)
+    for f in np.arange(n):
+        out[f] = h_affine_transform(data[f], H)
+
+    return out
+
 
 if __name__ == '__main__':
 

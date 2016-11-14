@@ -1,0 +1,13 @@
+*.raw
+*.txt
+*.inf
+*~
+*.dax
+*.pyc
+*.hdf5
+*.png
+*.npy
+*.dat
+/build/*
+/dist/*
+config
