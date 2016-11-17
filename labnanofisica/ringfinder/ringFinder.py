@@ -144,7 +144,7 @@ class Gollum(QtGui.QMainWindow):
         settingsLayout.addWidget(self.corrSlider, 3, 0, 1, 2)
         settingsLayout.addWidget(self.showCorrMapCheck, 4, 0, 1, 2)
         settingsLayout.addWidget(self.corrButton, 5, 0, 1, 2)
-        loadLayout.setColumnMinimumWidth(1, 40)
+        settingsLayout.setColumnMinimumWidth(1, 40)
         settingsFrame.setFixedHeight(180)
 
         # Load settings configuration and then connect the update
@@ -184,7 +184,7 @@ class Gollum(QtGui.QMainWindow):
         self.mainLayout.addWidget(self.ringImgWidget, 1, 2, 2, 1)
         self.mainLayout.setColumnMinimumWidth(1, 600)
         self.mainLayout.setColumnMinimumWidth(2, 600)
-        self.buttonWidget.setFixedWidth(200)
+        self.buttonWidget.setFixedWidth(225)
 
         self.loadSTORMButton.clicked.connect(self.loadSTORM)
         self.loadSTEDButton.clicked.connect(self.loadSTED)
@@ -194,8 +194,10 @@ class Gollum(QtGui.QMainWindow):
         # Load sample STED image
         folder = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder')
         if os.path.exists(folder):
+            self.folder = folder
             self.loadSTED(os.path.join(folder, 'spectrinSTED.tif'))
         else:
+            self.folder = os.getcwd()
             self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
     def updateConfig(self):
@@ -236,7 +238,7 @@ class Gollum(QtGui.QMainWindow):
             if not(isinstance(filename, str)):
                 self.filename = utils.getFilename('Load ' + tt + ' image',
                                                   [('Tiff file', '.tif')],
-                                                  os.getcwd())
+                                                  self.folder)
             else:
                 self.filename = filename
 
@@ -245,7 +247,7 @@ class Gollum(QtGui.QMainWindow):
                 self.corrButton.setChecked(False)
                 self.analyzed = False
 
-                self.initialdir = os.path.split(self.filename)[0]
+                self.folder = os.path.split(self.filename)[0]
                 self.crop = np.int(crop)
                 self.pxSize = pxSize
                 self.corrVb.clear()
@@ -402,7 +404,7 @@ class Gollum(QtGui.QMainWindow):
         try:
             filenames = utils.getFilenames('Load ' + tech + ' images',
                                            [('Tiff file', '.tif')],
-                                           self.initialdir)
+                                           self.folder)
             nfiles = len(filenames)
             function(filenames[0])
             corrArray = np.zeros((nfiles, self.n[0], self.n[1]))

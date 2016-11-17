@@ -225,8 +225,10 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         # Load sample STED image
         folder = os.path.join(os.getcwd(), 'labnanofisica', 'ringfinder')
         if os.path.exists(folder):
+            self.folder = folder
             self.loadSTED(os.path.join(folder, 'spectrinSTED.tif'))
         else:
+            self.folder = os.getcwd()
             self.loadSTED(os.path.join(os.getcwd(), 'spectrinSTED.tif'))
 
         # Correlation
@@ -264,13 +266,13 @@ class ImageWidget(pg.GraphicsLayoutWidget):
             if not(isinstance(filename, str)):
                 self.filename = utils.getFilename('Load ' + tech + ' image',
                                                   [('Tiff file', '.tif')],
-                                                  os.getcwd())
+                                                  self.folder)
             else:
                 self.filename = filename
 
             if self.filename is not None:
 
-                self.initialdir = os.path.split(self.filename)[0]
+                self.folder = os.path.split(self.filename)[0]
                 self.pxSize = pxSize
                 self.inputVb.clear()
 

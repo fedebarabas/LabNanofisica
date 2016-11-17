@@ -26,8 +26,6 @@ def saveConfig(main):
 
     config = configparser.ConfigParser()
 
-    print(main.intThresEdit.text())
-
     config['Loading'] = {
         'STORM px nm': main.STORMPxEdit.text(),
         'STORM magnification': main.magnificationEdit.text(),
