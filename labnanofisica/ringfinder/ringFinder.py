@@ -214,11 +214,8 @@ class Gollum(QtGui.QMainWindow):
             self.ringResult.setImage(np.fliplr(np.transpose(self.ringsBig)))
 
     def loadSTED(self, filename=None):
-        load = self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
-                              filename=filename)
-        if load:
-            self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.5')
+        self.loadImage(np.float(self.STEDPxEdit.text()), 'STED',
+                       filename=filename)
 
     def loadSTORM(self, filename=None):
         # The STORM image has black borders because it's not possible to
@@ -231,8 +228,6 @@ class Gollum(QtGui.QMainWindow):
         if load:
             self.corrImgHist.setLevels(0, 3)
             self.ringImgHist.setLevels(0, 3)
-            self.sigmaEdit.setText('100')
-            self.intThresEdit.setText('0.5')
 
     def loadImage(self, pxSize, tt, crop=0, filename=None):
 

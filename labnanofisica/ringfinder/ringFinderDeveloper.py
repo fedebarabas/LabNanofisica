@@ -322,8 +322,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
     def loadSTED(self, filename=None):
         prevSigma = self.main.sigmaEdit.text()
         prevThres = self.main.intThresEdit.text()
-        self.main.sigmaEdit.setText('100')
-        self.main.intThresEdit.setText('0.5')
         load = self.loadImage('STED', np.float(self.main.STEDPxEdit.text()),
                               filename=filename)
         if not(load):
@@ -334,8 +332,6 @@ class ImageWidget(pg.GraphicsLayoutWidget):
         prevSigma = self.main.sigmaEdit.text()
         prevThres = self.main.intThresEdit.text()
         self.inputImgHist.setLevels(0, 3)
-        self.main.sigmaEdit.setText('100')
-        self.main.intThresEdit.setText('0.5')
         # The STORM image has black borders because it's not possible to
         # localize molecules near the edge of the widefield image.
         # Therefore we need to crop those 3px borders before running the
