@@ -376,11 +376,13 @@ def corrMethod(data, mask, minLen, thStep, deltaTh, wvlen, sinPow,
                 # creates simulated axon
                 axonTheta = simAxon(subImgSize, wvlen, theta[t], p*.025, a=0,
                                     b=sinPow).data
-                axonTheta = np.ma.array(axonTheta, mask=mask).filled(0)
+                axonThetaMasked = np.ma.array(axonTheta, mask=mask)
+                dataMasked = np.ma.array(data, mask=mask)
 
                 # saves correlation for the given phase p
                 # Unbiasing dependence of corr with area of neuron in block
-                corrPhase[p] = pearson(data, axonTheta)*neuronFrac
+                corrPhase[p] = pearson(dataMasked, axonThetaMasked)
+#                corrPhase[p] = pearson(dataMasked, axonThetaMasked)*neuronFrac
 
             # saves the correlation for the best p, and given angle i
             corrTheta[t - 1] = np.max(corrPhase)
