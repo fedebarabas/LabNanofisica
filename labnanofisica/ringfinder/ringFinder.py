@@ -478,11 +478,19 @@ class Gollum(QtGui.QMainWindow):
                      linewidth=2)
             text = ('ringFrac={0:.3f} +- {1:.3f} \n'
                     'correlation threshold={2:.2f} \n'
-                    'mean correlation={3:.4f} +- {4:.4f} \n'
-                    'mean ring correlation={5:.4f} +- {6:.4f}')
+                    'mean correlation={3:.4f} \n'
+                    'standard deviation= {4:.4f} \n'
+                    'standard error of the mean= {5:.4f}\n'
+                    'mean ring correlation= {6:.4f} \n'
+                    'standard deviation= {7:.4f} \n'
+                    'standard error of the mean= {8:.4f}')
+            stdCorr = np.std(validCorr)
+            stdRing = np.std(ringData)
             text = text.format(ringFrac, ringStd, self.corrThres,
-                               np.mean(validCorr), np.std(validCorr)/n,
-                               np.mean(ringData), np.std(ringData)/nring)
+                               np.mean(validCorr), stdCorr,
+                               stdCorr/math.sqrt(n),
+                               np.mean(ringData), stdRing,
+                               stdRing/math.sqrt(nring))
             plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3], text,
                      horizontalalignment='center', verticalalignment='center',
                      bbox=dict(facecolor='white'))
