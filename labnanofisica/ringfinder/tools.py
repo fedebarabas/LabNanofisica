@@ -22,7 +22,10 @@ import pyqtgraph as pg
 from labnanofisica.ringfinder.neurosimulations import simAxon
 
 
-def saveConfig(main):
+def saveConfig(main, filename=None):
+
+    if filename is None:
+        filename = os.path.join(os.getcwd(), 'config')
 
     config = configparser.ConfigParser()
 
@@ -42,11 +45,14 @@ def saveConfig(main):
         'Delta angle deg': main.deltaThEdit.text(),
         'Discrimination threshold': main.corrThresEdit.text()}
 
-    with open(os.path.join(os.getcwd(), 'config'), 'w') as configfile:
+    with open(filename, 'w') as configfile:
         config.write(configfile)
 
 
-def saveDefaultConfig():
+def saveDefaultConfig(filename=None):
+
+    if filename is None:
+        filename = os.path.join(os.getcwd(), 'config')
 
     config = configparser.ConfigParser()
 
@@ -60,14 +66,17 @@ def saveDefaultConfig():
         'Angular step deg': '3', 'Delta angle deg': '20',
         'Discrimination threshold': '0.12'}
 
-    with open(os.path.join(os.getcwd(), 'config'), 'w') as configfile:
+    with open(filename, 'w') as configfile:
         config.write(configfile)
 
 
-def loadConfig(main):
+def loadConfig(main, filename=None):
+
+    if filename is None:
+        filename = os.path.join(os.getcwd(), 'config')
 
     config = configparser.ConfigParser()
-    config.read(os.path.join(os.getcwd(), 'config'))
+    config.read(filename)
 
     loadConfig = config['Loading']
     main.STORMPxEdit.setText(loadConfig['STORM px nm'])
