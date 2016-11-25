@@ -20,6 +20,11 @@ import labnanofisica.utils as utils
 import labnanofisica.ringfinder.tools as tools
 
 
+def insertFolder(p, folder):
+    splitted = os.path.split(p)
+    return os.path.join(splitted[0], folder, splitted[1])
+
+
 class Gollum(QtGui.QMainWindow):
 
     def __init__(self, *args, **kwargs):
@@ -422,6 +427,13 @@ class Gollum(QtGui.QMainWindow):
             self.folderStatus.setText('Processing folder ' + path)
             print('Processing folder', path)
             t0 = time.time()
+
+            # Make results directory if it doesn't exist
+            resultsDir = os.path.join(path, 'results')
+            if not os.path.exists(resultsDir):
+                os.makedirs(resultsDir)
+            resultsNames = [insertFolder(p, 'results') for p in filenames]
+
             for i in np.arange(nfiles):
                 print(os.path.split(filenames[i])[1])
                 self.fileStatus.setText(os.path.split(filenames[i])[1])
@@ -434,7 +446,7 @@ class Gollum(QtGui.QMainWindow):
                         self.crop:bound[1]] = self.localCorrBig
 
                 # Save correlation values array
-                corrName = utils.insertSuffix(filenames[i], '_correlation')
+                corrName = utils.insertSuffix(resultsNames[i], '_correlation')
                 tiff.imsave(corrName, corrExp[i], software='Gollum',
                             imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
@@ -445,11 +457,14 @@ class Gollum(QtGui.QMainWindow):
             ringsExp[corrExp >= self.corrThres] = 1
             for i in np.arange(nfiles):
                 # Save correlation values array
-                ringName = utils.insertSuffix(filenames[i], '_rings')
+                ringName = utils.insertSuffix(resultsNames[i], '_rings')
                 tiff.imsave(ringName, ringsExp[i], software='Gollum',
                             imagej=True,
                             resolution=(1000/self.pxSize, 1000/self.pxSize),
                             metadata={'spacing': 1, 'unit': 'um'})
+
+            # save configuration file in the results folder
+            tools.saveConfig(self, os.path.join(resultsDir, 'config'))
 
             # plot histogram of the correlation values
             hrange = (np.min(np.nan_to_num(corrArray)),
@@ -462,7 +477,7 @@ class Gollum(QtGui.QMainWindow):
             validCorr = corrArrayFlat[~np.isnan(corrArrayFlat)]
             validArr = np.repeat(np.arange(nfiles), np.prod(self.n))
             validArr = validArr[~np.isnan(corrArrayFlat)]
-            valuesTxt = os.path.join(path, folder + 'corr_values.txt')
+            valuesTxt = os.path.join(resultsDir, folder + 'corr_values.txt')
             np.savetxt(valuesTxt, np.stack((validCorr, validArr), 1),
                        fmt='%f\t%i')
 
@@ -476,28 +491,21 @@ class Gollum(QtGui.QMainWindow):
             plt.bar(x, y, align='center', width=(x[1] - x[0]))
             plt.plot((self.corrThres, self.corrThres), (0, np.max(y)), 'r--',
                      linewidth=2)
-            text = ('ringFrac={0:.3f} +- {1:.3f} \n'
-                    'correlation threshold={2:.2f} \n'
-                    'mean correlation={3:.4f} \n'
-                    'standard deviation= {4:.4f} \n'
-                    'standard error of the mean= {5:.4f}\n'
-                    'mean ring correlation= {6:.4f} \n'
-                    'standard deviation= {7:.4f} \n'
-                    'standard error of the mean= {8:.4f}')
-            stdCorr = np.std(validCorr)
-            stdRing = np.std(ringData)
-            text = text.format(ringFrac, ringStd, self.corrThres,
-                               np.mean(validCorr), stdCorr,
-                               stdCorr/math.sqrt(n),
-                               np.mean(ringData), stdRing,
-                               stdRing/math.sqrt(nring))
+            text = ('correlation threshold = {0:.2f} \n'
+                    'n = {1}; nrings = {2} \n'
+                    'ringFrac = {3:.3f} +- {4:.3f} \n'
+                    'mean correlation = {5:.4f} +- {6:.4f}\n'
+                    'mean ring correlation = {7:.4f} +- {8:.4f}')
+            text = text.format(self.corrThres, n, nring, ringFrac, ringStd,
+                               np.mean(validCorr), np.std(validCorr),
+                               np.mean(ringData), np.std(ringData))
             plt.text(0.8*plt.axis()[1], 0.8*plt.axis()[3], text,
                      horizontalalignment='center', verticalalignment='center',
                      bbox=dict(facecolor='white'))
             plt.title("Correlations Histogram")
             plt.xlabel("Value")
             plt.ylabel("Frequency")
-            plt.savefig(os.path.join(path, folder + 'corr_hist'))
+            plt.savefig(os.path.join(resultsDir, folder + 'corr_hist'))
             plt.close()
 
             folder = os.path.split(path)[1]
