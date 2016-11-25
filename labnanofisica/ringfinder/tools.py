@@ -8,6 +8,7 @@ Created on Sun Aug 14 14:53:28 2016
 import os
 import numpy as np
 import math
+from PIL import Image
 import configparser
 from scipy.ndimage.measurements import center_of_mass
 from skimage.feature import peak_local_max
@@ -16,10 +17,92 @@ try:
 except ImportError:
     import skimage.filter as filters
 from skimage.transform import probabilistic_hough_line
+import matplotlib.pyplot as plt
 from pyqtgraph.Qt import QtCore, QtGui
 import pyqtgraph as pg
 
 from labnanofisica.ringfinder.neurosimulations import simAxon
+import labnanofisica.utils as utils
+
+
+def loadData(folder, ax, subimgPxSize):
+    """
+    Plot loaded image, blocks grid and numbers
+    """
+
+    # Load image
+    filename = utils.getFilename('Load image',
+                                 [('Tiff file', '.tif')], folder)
+    newFolder = os.path.split(filename)[0]
+
+    with Image.open(filename) as im:
+        inputData = np.array(im).astype(np.float64)
+    n = (np.array(inputData.shape)/subimgPxSize).astype(int)
+
+    plt.imshow(inputData, interpolation='None')
+    plt.colorbar()
+    yticks = np.arange(0, inputData.shape[1], subimgPxSize)
+    xticks = np.arange(0, inputData.shape[0], subimgPxSize)
+    ax.set_yticks(yticks, minor=False)
+    ax.set_xticks(xticks, minor=False)
+    ax.yaxis.grid(True, which='major', color='w', linewidth=1)
+    ax.xaxis.grid(True, which='major', color='w', linewidth=1)
+    for y in np.arange(n[1]):
+        for x in np.arange(n[1]):
+            plt.text((x + 0.5)*subimgPxSize, (y + 0.5)*subimgPxSize,
+                     '{}'.format(x + 10*y), color='w',
+                     horizontalalignment='center', verticalalignment='center')
+
+    # Segment image in blocks
+    nblocks = np.array(inputData.shape)/n
+    blocks = blockshaped(inputData, *nblocks)
+
+    return newFolder, blocks
+
+
+def buildData(technique, pxSize, mag=None):
+
+    subimgPxSize = 1000/pxSize
+    keepWorking = True
+    folder = os.getcwd()
+
+    print("Test image creation script started...")
+    fig, ax = plt.subplots()
+
+    try:
+        folder, blocks = loadData(os.getcwd(), ax, subimgPxSize)
+
+        # this array will be the output
+        testData = np.zeros(blocks.shape, dtype=np.uint16)
+
+        print('We need 50 rings and 50 no rings')
+        nRings = 50
+        nNoRings = 50
+        blockRings = input("Select nice ring blocks (i.e. '1-3-11-20')")
+        blockRings = [int(s) for s in blockRings.split('-')]
+        nRings -= len(blockRings)
+        blockNoRings = input("Select non-ring (but still neuron) blocks "
+                             "(i.e. '2-7-14-24')")
+        blockNoRings = [int(s) for s in blockNoRings.split('-')]
+        nNoRings -= len(blockNoRings)
+
+
+
+
+    except OSError:
+        keepWorking = False
+
+    while keepWorking:
+
+        try:
+            folder, blocks = loadData(os.getcwd(), ax, subimgPxSize)
+
+
+
+            keepWorking = input('Keep working? [y/n]') == 'y'
+
+        except OSError:
+            print('No file selected!')
 
 
 def saveConfig(main):
@@ -129,6 +212,19 @@ def blockshaped(arr, nrows, ncols):
     return (arr.reshape(h//nrows, nrows, -1, ncols)
                .swapaxes(1, 2)
                .reshape(-1, nrows, ncols))
+
+def unblockshaped(arr, h, w):
+    """
+    Return an array of shape (h, w) where
+    h * w = arr.size
+
+    If arr is of shape (n, nrows, ncols), n sublocks of shape (nrows, ncols),
+    then the returned array preserves the "physical" layout of the sublocks.
+    """
+    n, nrows, ncols = arr.shape
+    return (arr.reshape(h//nrows, -1, nrows, ncols)
+               .swapaxes(1, 2)
+               .reshape(h, w))
 
 
 def firstNmax(coord, image, N):
