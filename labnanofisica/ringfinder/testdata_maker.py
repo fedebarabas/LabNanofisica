@@ -20,7 +20,7 @@ def loadData(folder, ax, subimgPxSize, technique, mag=None):
     """
 
     # Load image
-    filename = utils.getFilename('Load image',
+    filename = utils.getFilename('Load ' + technique + ' image',
                                  [('Tiff file', '.tif')], folder)
     newFolder = os.path.split(filename)[0]
 
@@ -50,11 +50,17 @@ def selectBlocks(needRings, needNoRings):
     print(text.format(needRings, needNoRings))
 
     listRings = input("Select nice ring blocks (i.e. '1-3-11-20') ")
-    listRings = [int(s) for s in listRings.split('-')]
+    try:
+        listRings = [int(s) for s in listRings.split('-')]
+    except ValueError:
+        listRings = []
 
     listNoRings = input("Select non-ring (but still neuron) blocks "
                         "(i.e. '2-7-14-24') ")
-    listNoRings = [int(s) for s in listNoRings.split('-')]
+    try:
+        listNoRings = [int(s) for s in listNoRings.split('-')]
+    except ValueError:
+        listNoRings = []
 
     return listRings, listNoRings
 
@@ -91,10 +97,10 @@ def buildData(technique, pxSize, mag=None):
     nNoRings = 0
 
     print("Test image creation script started...")
-    fig, ax = plt.subplots()
-    fig.set_size_inches(12, 18, forward=True)
 
     try:
+        fig, ax = plt.subplots()
+        fig.set_size_inches(12, 18, forward=True)
         folder, blocks, dataShape = loadData(os.getcwd(), ax, subimgPxSize,
                                              technique, mag)
         plt.show(block=False)
@@ -113,6 +119,7 @@ def buildData(technique, pxSize, mag=None):
         testData[maxRings + nNoRings:maxRings + nNoRings + lNR] = nRBlocks
         nNoRings += lNR
 
+        plt.close()
         keepWorking = input('Keep working? [y/n] ') == 'y'
 
     except OSError:
@@ -121,9 +128,11 @@ def buildData(technique, pxSize, mag=None):
     while keepWorking:
 
         try:
+            fig, ax = plt.subplots()
+            fig.set_size_inches(12, 18, forward=True)
             folder, blocks, dd = loadData(folder, ax, subimgPxSize,
                                           technique, mag)
-
+            plt.show(block=False)
             listRings, listNoRings = selectBlocks(maxRings - nRings,
                                                   maxNoRings - nNoRings)
             lR = len(listRings)
@@ -134,6 +143,7 @@ def buildData(technique, pxSize, mag=None):
             testData[maxRings + nNoRings:maxRings + nNoRings + lNR] = nRBlocks
             nNoRings += lNR
 
+            plt.close()
             keepWorking = input('Keep working? [y/n] ') == 'y'
 
         except OSError:
