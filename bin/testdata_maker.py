@@ -10,5 +10,4 @@ from labnanofisica.ringfinder.testdata_maker import buildData
 
 if __name__ == '__main__':
 
-    buildData('STED', 20)
-#    buildData('STORM', 13.3, 10)
+    buildData()

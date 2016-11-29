@@ -26,9 +26,10 @@ def loadData(folder, ax, subimgPxSize, technique, mag=None):
 
     inputData = tiff.imread(filename)
     dataShape = inputData.shape
+    fileShape = inputData.shape
 
     if technique == 'STORM':
-        crop = 3*mag
+        crop = int(3*mag)
         bound = (np.array(dataShape) - crop).astype(np.int)
         inputData = inputData[crop:bound[0], crop:bound[1]]
         dataShape = inputData.shape
@@ -41,7 +42,7 @@ def loadData(folder, ax, subimgPxSize, technique, mag=None):
     nblocks = np.array(dataShape)/n
     blocks = tools.blockshaped(inputData, *nblocks)
 
-    return newFolder, blocks, dataShape
+    return newFolder, blocks, dataShape, fileShape
 
 
 def selectBlocks(needRings, needNoRings):
@@ -49,14 +50,14 @@ def selectBlocks(needRings, needNoRings):
     text = 'We need {} rings and {} no rings blocks'
     print(text.format(needRings, needNoRings))
 
-    listRings = input("Select nice ring blocks (i.e. '1-3-11-20') ")
+    listRings = input("Select nice ring blocks (i.e. 1-3-11-20) ")
     try:
         listRings = [int(s) for s in listRings.split('-')]
     except ValueError:
         listRings = []
 
     listNoRings = input("Select non-ring (but still neuron) blocks "
-                        "(i.e. '2-7-14-24') ")
+                        "(i.e. 2-7-14-24) ")
     try:
         listNoRings = [int(s) for s in listNoRings.split('-')]
     except ValueError:
@@ -89,20 +90,33 @@ def plotWithGrid(data, ax, subimgPxSize):
                      verticalalignment='center')
 
 
-def buildData(technique, pxSize, mag=None):
+def buildData(technique=None, pxSize=None, mag=None):
 
+    print("Test image creation script started...")
+
+    if technique is None:
+        te = input('STED or STORM? STED=1, STORM=2 ')
+        if te == '1':
+            technique = 'STED'
+
+        elif te == '2':
+            technique = 'STORM'
+            mag = float(input('Enter super-resolved image magnification '))
+
+        else:
+            print('Invalid answer')
+
+    pxSize = float(input('Enter px size in nm '))
     subimgPxSize = 1000/pxSize
     folder = os.getcwd()
     nRings = 0
     nNoRings = 0
 
-    print("Test image creation script started...")
-
     try:
         fig, ax = plt.subplots()
-        fig.set_size_inches(12, 18, forward=True)
-        folder, blocks, dataShape = loadData(os.getcwd(), ax, subimgPxSize,
-                                             technique, mag)
+        fig.set_size_inches(12, 16, forward=True)
+        loadOutput = loadData(os.getcwd(), ax, subimgPxSize, technique, mag)
+        folder, blocks, dataShape, fileShape = loadOutput
         plt.show(block=False)
 
         # this array will be the output
@@ -150,12 +164,21 @@ def buildData(technique, pxSize, mag=None):
             print('No file selected!')
 
     testData = tools.unblockshaped(testData, *dataShape)
-    plotWithGrid(testData, ax, subimgPxSize)
-    plt.show()
 
-    tiff.imsave('testdata.tif', testData)
+    if technique == 'STORM':
+        crop = int(3*mag)
+        bound = (np.array(fileShape) - crop).astype(np.int)
+        newTestData = np.zeros(fileShape, testData.dtype)
+        newTestData[crop:bound[0], crop:bound[1]] = testData
+        plotWithGrid(testData, ax, subimgPxSize)
+        plt.show()
+        tiff.imsave('testdata.tif', newTestData)
+
+    else:
+        plotWithGrid(testData, ax, subimgPxSize)
+        plt.show()
+        tiff.imsave('testdata.tif', testData)
 
 if __name__ == '__main__':
 
-    buildData('STED', 20)
-#    buildData('STORM', 13.3, 10)
+    buildData()

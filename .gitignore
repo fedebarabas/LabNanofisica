@@ -12,3 +12,4 @@
 /dist/*
 config
 *.spec
+testdata.tif
