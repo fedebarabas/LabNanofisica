@@ -144,8 +144,8 @@ def buildData(technique=None, pxSize=None, mag=None):
         try:
             fig, ax = plt.subplots()
             fig.set_size_inches(12, 18, forward=True)
-            folder, blocks, dd = loadData(folder, ax, subimgPxSize,
-                                          technique, mag)
+            folder, blocks, dd, ee = loadData(folder, ax, subimgPxSize,
+                                              technique, mag)
             plt.show(block=False)
             listRings, listNoRings = selectBlocks(maxRings - nRings,
                                                   maxNoRings - nNoRings)
