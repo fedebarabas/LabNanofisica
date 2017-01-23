@@ -521,6 +521,14 @@ def pointsMethod(self, data, thres=.3):
 
     return points, D, rings
 
+def plotResults():
+    data = np.loadtxt(r'/home/federico/Desktop/Gollum/STORM/results.txt')
+    data_sted = np.loadtxt(r'/home/federico/Desktop/Gollum/STED/results.txt')
+    plt.bar(np.arange(len(data[2])), data[0], yerr=data[1], align='edge', tick_label=data[2].astype(int), error_kw=dict(ecolor='black', lw=2, capsize=5, capthick=2), width=-0.4,label='STORM r=0.2')
+    plt.bar(np.arange(len(data_sted[2])), data_sted[0], yerr=data_sted[1], align='edge', color='red', tick_label=data_sted[2].astype(int), error_kw=dict(ecolor='black', lw=2, capsize=5, capthick=2), width=0.4,label='STED r=0.16')
+    plt.legend(loc=2)
+    plt.xlabel('DIV')
+    plt.ylabel('Ring fraction')
 
 class Grid:
 
